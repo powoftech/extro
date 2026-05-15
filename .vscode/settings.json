@@ -1,0 +1,16 @@
+{
+  "cSpell.words": [
+    "browsercookie",
+    "extro",
+    "mypy",
+    "oreilly",
+    "platformdirs",
+    "pydantic",
+    "sqlalchemy",
+    "typer"
+  ],
+  "editor.codeActionsOnSave": {
+    "source.fixAll.ruff": "explicit",
+    "source.organizeImports.ruff": "explicit"
+  }
+}
