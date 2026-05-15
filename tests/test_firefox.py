@@ -82,9 +82,7 @@ class TestGetFirefoxProfiles:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         ini = _make_ini(tmp_path, _PROFILES_INI_EMPTY)
-        monkeypatch.setattr(
-            "extro.core.firefox._profiles_ini_path", lambda: ini
-        )
+        monkeypatch.setattr("extro.core.firefox._profiles_ini_path", lambda: ini)
         with pytest.raises(NoProfilesError):
             get_firefox_profiles()
 
@@ -93,9 +91,7 @@ class TestGetFirefoxProfiles:
     ) -> None:
         ini = _make_ini(tmp_path, _PROFILES_INI_TWO)
         _create_two_profile_dirs(tmp_path)
-        monkeypatch.setattr(
-            "extro.core.firefox._profiles_ini_path", lambda: ini
-        )
+        monkeypatch.setattr("extro.core.firefox._profiles_ini_path", lambda: ini)
 
         profiles = get_firefox_profiles()
 
@@ -110,16 +106,12 @@ class TestGetFirefoxProfiles:
     ) -> None:
         ini = _make_ini(tmp_path, _PROFILES_INI_TWO)
         _create_two_profile_dirs(tmp_path)
-        monkeypatch.setattr(
-            "extro.core.firefox._profiles_ini_path", lambda: ini
-        )
+        monkeypatch.setattr("extro.core.firefox._profiles_ini_path", lambda: ini)
 
         profiles = get_firefox_profiles()
         default_profile = profiles[0]
 
-        expected = (
-            tmp_path / "Profiles" / "abc123.default-release"
-        ).resolve()
+        expected = (tmp_path / "Profiles" / "abc123.default-release").resolve()
         assert default_profile.path == expected
 
     def test_profile_str_includes_default_marker(
@@ -127,18 +119,14 @@ class TestGetFirefoxProfiles:
     ) -> None:
         ini = _make_ini(tmp_path, _PROFILES_INI_TWO)
         _create_two_profile_dirs(tmp_path)
-        monkeypatch.setattr(
-            "extro.core.firefox._profiles_ini_path", lambda: ini
-        )
+        monkeypatch.setattr("extro.core.firefox._profiles_ini_path", lambda: ini)
 
         profiles = get_firefox_profiles()
         assert "[default]" in str(profiles[0])
         assert "[default]" not in str(profiles[1])
 
     def test_frozen_dataclass_is_hashable(self) -> None:
-        profile = FirefoxProfile(
-            name="test", path=Path("/tmp/test"), is_default=False
-        )
+        profile = FirefoxProfile(name="test", path=Path("/tmp/test"), is_default=False)
         assert hash(profile) is not None
         profile_set: set[FirefoxProfile] = {profile}
         assert profile in profile_set

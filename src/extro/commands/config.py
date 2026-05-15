@@ -124,7 +124,7 @@ def config_command() -> None:
     selected: FirefoxProfile | None = questionary.select(
         "Select a Firefox profile to use:",
         choices=choices,
-        default=default_profile, # type: ignore
+        default=default_profile,  # type: ignore
         style=_QUESTIONARY_STYLE,
         instruction="(↑↓ to move, Enter to confirm)",
     ).ask()

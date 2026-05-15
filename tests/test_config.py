@@ -31,9 +31,7 @@ class TestAppConfigRoundtrip:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         config_file = tmp_path / "config.json"
-        monkeypatch.setattr(
-            "extro.core.config._config_path", lambda: config_file
-        )
+        monkeypatch.setattr("extro.core.config._config_path", lambda: config_file)
 
         profile_dir = tmp_path / "profile0"
         profile_dir.mkdir()
@@ -50,9 +48,7 @@ class TestAppConfigRoundtrip:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         config_file = tmp_path / "nested" / "dirs" / "config.json"
-        monkeypatch.setattr(
-            "extro.core.config._config_path", lambda: config_file
-        )
+        monkeypatch.setattr("extro.core.config._config_path", lambda: config_file)
         # The parent dirs are created in _config_path; simulate that
         config_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -72,9 +68,7 @@ class TestAppConfigErrors:
     ) -> None:
         config_file = tmp_path / "config.json"
         config_file.write_text("{not valid json}", encoding="utf-8")
-        monkeypatch.setattr(
-            "extro.core.config._config_path", lambda: config_file
-        )
+        monkeypatch.setattr("extro.core.config._config_path", lambda: config_file)
 
         with pytest.raises(ConfigError):
             AppConfig.load()

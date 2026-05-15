@@ -77,9 +77,7 @@ def get_firefox_profiles() -> list[FirefoxProfile]:
         is_relative = config.getint(section, "IsRelative", fallback=1)
         is_default = config.getboolean(section, "Default", fallback=False)
 
-        profile_path = (
-            ini_path.parent / raw_path if is_relative else Path(raw_path)
-        )
+        profile_path = ini_path.parent / raw_path if is_relative else Path(raw_path)
 
         profiles.append(
             FirefoxProfile(
