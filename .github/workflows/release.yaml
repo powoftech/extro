@@ -66,9 +66,7 @@ jobs:
         uses: astral-sh/setup-uv@v8.1.0
         with:
           enable-cache: true
-          # Use 3.13 for release builds until 3.14 is stable on all runners.
-          # Update to "3.14" once GitHub-hosted runners support it fully.
-          python-version: "3.13"
+          python-version: "3.14"
 
       - name: Install dependencies (including dev for PyInstaller)
         run: uv sync --all-groups
