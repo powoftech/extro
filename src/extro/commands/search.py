@@ -27,7 +27,6 @@ def _format_list(values: list[str]) -> str:
 
 def _build_results_table(results: list[SearchResult]) -> Table:
     table = Table(
-        title="O'Reilly Books",
         header_style="bold cyan",
         border_style="dim",
     )
