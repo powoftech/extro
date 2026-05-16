@@ -43,6 +43,7 @@ strict = true
 pretty = true
 warn_unreachable = true
 warn_no_return = true
+explicit_package_bases = true
 
 [[tool.mypy.overrides]]
 module = ["extro.*"]
