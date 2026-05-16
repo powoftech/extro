@@ -41,14 +41,8 @@ python_version = "3.14"
 mypy_path = "src,typings"
 strict = true
 pretty = true
-explicit_package_bases = true
-warn_return_any = true
-warn_unused_configs = true
 warn_unreachable = true
-warn_incomplete_stub = true
 warn_no_return = true
-warn_redundant_casts = true
-warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
 module = ["questionary", "questionary.*", "platformdirs"]
