@@ -125,10 +125,7 @@ def list_book_summaries(
         msg = "Page must be at least 1."
         raise ValueError(msg)
 
-    total = (
-        session.scalar(select(func.count()).select_from(Book))
-        or 0
-    )
+    total = session.scalar(select(func.count()).select_from(Book)) or 0
     stmt: Select[tuple[Book]] = (
         select(Book)
         .options(selectinload(Book.snapshots).selectinload(BookSnapshot.files))
