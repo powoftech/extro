@@ -30,7 +30,7 @@ jobs:
         run: uv sync --locked --all-extras --dev
 
       - name: mypy - type check
-        run: mypy src/extro
+        run: mypy
 
       - name: Ruff - lint
         run: ruff check
