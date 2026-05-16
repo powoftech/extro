@@ -22,39 +22,17 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v8.1.0
         with:
-          enable-cache: true
+          version: "latest"
+          activate-environment: "true"
 
       - name: Install dependencies
         run: uv sync --all-groups
 
-      - name: Ruff - lint
-        run: uv run ruff check
-        
-      - name: Ruff - format check
-        run: uv run ruff format --check
-
       - name: mypy - type check
-        run: uv run mypy src/extro
+        run: mypy src/extro
 
-  # test:
-  #   name: Test (Python ${{ matrix.python-version }})
-  #   runs-on: ubuntu-latest
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       python-version: ["3.14"]
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v6
+      - name: Ruff - lint
+        run: ruff check
 
-  #     - name: Set up uv
-  #       uses: astral-sh/setup-uv@v8.1.0
-  #       with:
-  #         enable-cache: true
-  #         python-version: ${{ matrix.python-version }}
-
-  #     - name: Install dependencies
-  #       run: uv sync --all-groups
-
-  #     - name: Run tests
-  #       run: uv run pytest tests/ -v --tb=short
+      - name: Ruff - format check
+        run: ruff format --check
