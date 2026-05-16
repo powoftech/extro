@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import secrets
 import time
+from dataclasses import dataclass
 from typing import Literal, Protocol, cast
 
 import curl_cffi
@@ -19,8 +20,19 @@ from pydantic import (
 from extro.core.http import BROWSER_HEADERS
 
 SearchField = Literal["title", "publishers", "authors", "isbn"]
+SearchSort = Literal[
+    "popularity",
+    "date_added",
+    "publication_date",
+    "average_rating",
+    "title",
+    "duration",
+    "relevance",
+]
+SearchSortOrder = Literal["desc", "asc"]
 
 API_BASE_URL = "https://learning.oreilly.com/api/v2"
+SEARCH_LIMIT_MAX = 200
 
 
 class SearchResult(BaseModel):
@@ -44,6 +56,7 @@ class SearchResponse(BaseModel):
 
     results: list[SearchResult] = Field(default_factory=list)
     total: int = 0
+    page: int = 0
 
 
 class BookMetadata(BaseModel):
@@ -135,6 +148,15 @@ _DEFAULT_DELAY_MIN: float = 0.75
 _DEFAULT_DELAY_MAX: float = 1.0
 
 
+@dataclass(slots=True)
+class SearchParams:
+    field: SearchField = "title"
+    sort: SearchSort = "popularity"
+    order: SearchSortOrder = "desc"
+    limit: int = 10
+    page: int = 1
+
+
 class _JsonResponse(Protocol):
     url: str
 
@@ -164,7 +186,28 @@ class OreillyClient:
         self._delay_min = delay_min
         self._delay_max = delay_max
 
-    def search(self, keyword: str, *, field: SearchField = "title") -> SearchResponse:
+    def search(
+        self,
+        keyword: str,
+        *,
+        # field: SearchField = "title",
+        # sort: SearchSort = "popularity",
+        # order: SearchSortOrder = "desc",
+        # limit: int = 10,
+        # page: int = 1,
+        params: SearchParams | None = None,
+    ) -> SearchResponse:
+        params = params or SearchParams()
+        if params.limit < 1:
+            msg = "Limit must be at least 1."
+            raise ValueError(msg)
+        if params.limit > SEARCH_LIMIT_MAX:
+            msg = f"Limit cannot exceed {SEARCH_LIMIT_MAX}."
+            raise ValueError(msg)
+        if params.page < 1:
+            msg = "Page must be at least 1."
+            raise ValueError(msg)
+
         response = cast(
             "_JsonResponse",
             curl_cffi.get(
@@ -173,11 +216,12 @@ class OreillyClient:
                     "formats": "book",
                     "languages": "en",
                     "include_facets": "false",
-                    "field": field,
+                    "field": params.field,
                     "query": keyword,
-                    "sort": "popularity",
-                    "order": "desc",
-                    "limit": "10",
+                    "sort": params.sort,
+                    "order": params.order,
+                    "limit": str(params.limit),
+                    "page": str(params.page - 1),
                 },
                 headers=BROWSER_HEADERS,
                 http_version="v2",
@@ -188,6 +232,7 @@ class OreillyClient:
             ),
         )
         response.raise_for_status()
+        print(response.url)
         data = response.json()
         return SearchResponse.model_validate(data)
 

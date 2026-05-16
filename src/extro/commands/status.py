@@ -19,6 +19,7 @@ from extro.core.download import snapshot_file_path
 from extro.core.exceptions import ExtroError
 from extro.core.models import Book, BookSnapshot
 from extro.core.paths import downloads_dir
+from extro.core.utils import ms_epoch_to_iso8601
 
 console = Console()
 err_console = Console(stderr=True)
@@ -185,13 +186,8 @@ def snapshot_details(book: Book) -> list[SnapshotStatusDetail]:
 
 def _build_summary_table(
     summaries: list[BookStatusSummary],
-    *,
-    total: int,
-    limit: int,
-    page: int,
 ) -> Table:
     table = Table(
-        title=f"Downloaded Books (page {page}, showing {len(summaries)} of {total})",
         header_style="bold cyan",
         border_style="dim",
     )
@@ -199,11 +195,11 @@ def _build_summary_table(
     table.add_column("Title", style="bold white", overflow="fold")
     table.add_column("Authors", overflow="fold")
     table.add_column("Publishers", overflow="fold")
-    table.add_column("Published", no_wrap=True)
-    table.add_column("DB Snapshots", justify="right", no_wrap=True)
-    table.add_column("Local Snapshots", justify="right", no_wrap=True)
-    table.add_column("Latest Version", no_wrap=True)
-    table.add_column("Latest Status", no_wrap=True)
+    table.add_column("Publication\nDate", no_wrap=True)
+    table.add_column("DB\nSnapshots", justify="right", no_wrap=True)
+    table.add_column("Local\nSnapshots", justify="right", no_wrap=True)
+    table.add_column("Latest\nVersion", no_wrap=True)
+    table.add_column("Latest\nStatus", no_wrap=True)
     table.add_column("Progress", overflow="fold")
     table.add_column("Paths", no_wrap=True)
 
@@ -217,14 +213,12 @@ def _build_summary_table(
             summary.book.publication_date or "-",
             str(summary.snapshot_count),
             str(summary.local_snapshot_count),
-            latest.version if latest is not None else "-",
+            ms_epoch_to_iso8601(latest.version) if latest is not None else "-",
             latest.status if latest is not None else "-",
             _format_progress(latest),
             summary.local_path_state,
         )
 
-    if total > page * limit:
-        table.caption = f"Next page: extro status --limit {limit} --page {page + 1}"
     return table
 
 
@@ -264,7 +258,7 @@ def _build_snapshot_table(details: list[SnapshotStatusDetail]) -> Table:
         snapshot = detail.snapshot
         table.add_row(
             str(snapshot.id),
-            snapshot.version,
+            ms_epoch_to_iso8601(snapshot.version),
             snapshot.status,
             _format_progress(snapshot),
             "yes" if detail.directory_exists else "no",
@@ -306,14 +300,16 @@ def status_command(
             if not summaries:
                 console.print("[yellow]No downloaded books found.[/yellow]")
                 return
+            console.print(_build_summary_table(summaries))
             console.print(
-                _build_summary_table(
-                    summaries,
-                    total=total,
-                    limit=limit,
-                    page=page,
-                )
+                f"[dim]Page {page}: showing {len(summaries)} "
+                f"of {total} result(s).[/dim]",
             )
+            if total > page * limit:
+                console.print(
+                    f"[dim]Next page: extro status "
+                    f"--limit {limit} --page {page + 1}[/dim]",
+                )
             return
 
         book = find_book(session, book_identifier)
