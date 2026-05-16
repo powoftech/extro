@@ -7,6 +7,8 @@ from rich.console import Console
 
 from extro import __version__
 from extro.commands.config import config_command
+from extro.commands.download import download_command
+from extro.commands.search import search_command
 
 console = Console()
 
@@ -50,6 +52,14 @@ app.command(
     help="Select a Firefox profile and save it as the active profile.",
     epilog="Run this first to configure which Firefox profile extro should use.",
 )(config_command)
+app.command(
+    name="search",
+    help="Search English books on O'Reilly Learning.",
+)(search_command)
+app.command(
+    name="download",
+    help="Download an O'Reilly book snapshot and resume progress.",
+)(download_command)
 
 
 if __name__ == "__main__":
