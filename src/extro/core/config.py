@@ -32,10 +32,6 @@ class AppConfig(BaseModel):
             return None
         return Path(v)
 
-    # ------------------------------------------------------------------
-    # Persistence helpers
-    # ------------------------------------------------------------------
-
     @classmethod
     def load(cls) -> AppConfig:
         """Load config from disk. Returns a default instance if not found.

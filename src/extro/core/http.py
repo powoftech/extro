@@ -9,10 +9,6 @@ from __future__ import annotations
 
 import curl_cffi
 
-# ---------------------------------------------------------------------------
-# Browser-spoof headers shared by every outbound request
-# ---------------------------------------------------------------------------
-
 BROWSER_HEADERS: dict[str, str] = {
     "Accept": (
         "text/html,application/xhtml+xml,application/xml;"

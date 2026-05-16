@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
-import random
+import secrets
 import time
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import curl_cffi
 import questionary
@@ -50,17 +50,18 @@ _DELAY_MIN: float = 0.5
 _DELAY_MAX: float = 1.0
 
 
-# ---------------------------------------------------------------------------
-# Type aliases
-# ---------------------------------------------------------------------------
-
 Sleep = Callable[[float], None]
 RandomDelay = Callable[[], float]
 
 
-# ---------------------------------------------------------------------------
-# Cookie-authenticated HTTP client
-# ---------------------------------------------------------------------------
+class _SessionResponse(curl_cffi.Response):
+    def raise_for_status(self) -> None: ...
+
+
+class _JsonResponse(Protocol):
+    url: str
+
+    def json(self) -> dict[str, str]: ...
 
 
 class CookieFileClient:
@@ -76,18 +77,14 @@ class CookieFileClient:
         self._session = self._new_session()
 
     def get_json(self, url: str) -> dict[str, Any]:
-        response = self._get_with_refresh(url)
-        data = response.json()
-        if not isinstance(data, dict):
-            msg = f"Expected object response from {url}"
-            raise TypeError(msg)
-        return data
+        response = cast("_JsonResponse", self._get_with_refresh(url))
+        return response.json()
 
     def get_bytes(self, url: str) -> curl_cffi.Response:
         return self._get_with_refresh(url)
 
     def _get_with_refresh(self, url: str) -> curl_cffi.Response:
-        response = self._session.get(url)
+        response = cast("_SessionResponse", self._session.get(url))
         if response.status_code not in _AUTH_FAILURE_STATUS_CODES:
             response.raise_for_status()
             return response
@@ -96,7 +93,7 @@ class CookieFileClient:
         logger.debug("Auth failure for %s; refreshing Firefox cookies.", url)
         refresh_cookies_via_firefox(self._profile_dir)
         self._session = self._new_session()
-        response = self._session.get(url)
+        response = cast("_SessionResponse", self._session.get(url))
         response.raise_for_status()
         return response
 
@@ -105,23 +102,17 @@ class CookieFileClient:
         return make_session(cookies=cookies)
 
 
-# ---------------------------------------------------------------------------
-# Download manager
-# ---------------------------------------------------------------------------
-
-
 class DownloadManager:
     """Orchestrates fetching and persisting a complete O'Reilly book snapshot."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         *,
         api_client: OreillyClient,
         session: Session,
         console: Console,
         cookie_client_factory: Callable[[Path], CookieFileClient] = CookieFileClient,
-        sleep: Sleep = time.sleep,
-        random_delay: RandomDelay = lambda: random.uniform(  # noqa: S311
+        random_delay: RandomDelay = lambda: secrets.SystemRandom().uniform(
             _DELAY_MIN, _DELAY_MAX
         ),
     ) -> None:
@@ -129,7 +120,6 @@ class DownloadManager:
         self._session = session
         self._console = console
         self._cookie_client_factory = cookie_client_factory
-        self._sleep = sleep
         self._random_delay = random_delay
 
     def download(self, book_identifier: str, *, profile_dir: Path) -> Path:
@@ -197,10 +187,6 @@ class DownloadManager:
         self._session.commit()
         return snapshot_path
 
-    # ------------------------------------------------------------------
-    # Version confirmation (injectable for testing)
-    # ------------------------------------------------------------------
-
     def _confirm_new_version(
         self,
         previous_snapshot: BookSnapshot,
@@ -220,10 +206,6 @@ class DownloadManager:
             default=True,
         ).ask()
         return bool(answer)
-
-    # ------------------------------------------------------------------
-    # Manifest fetching and writing
-    # ------------------------------------------------------------------
 
     def _fetch_manifests(self, metadata: BookMetadata) -> dict[str, Any]:
         return {
@@ -246,10 +228,6 @@ class DownloadManager:
                 json.dumps(payload, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
-
-    # ------------------------------------------------------------------
-    # Database helpers
-    # ------------------------------------------------------------------
 
     def _upsert_book(self, metadata: dict[str, Any]) -> Book:
         stmt: Select[tuple[Book]] = select(Book).where(
@@ -354,10 +332,6 @@ class DownloadManager:
         self._refresh_snapshot_progress(snapshot)
         self._session.commit()
 
-    # ------------------------------------------------------------------
-    # File downloading
-    # ------------------------------------------------------------------
-
     def _download_files(
         self,
         cookie_client: CookieFileClient,
@@ -387,7 +361,7 @@ class DownloadManager:
                 self._session.commit()
                 progress.update(bytes_task, completed=snapshot.downloaded_bytes)
                 if index < len(pending) - 1:
-                    self._sleep(self._random_delay())
+                    time.sleep(self._random_delay())
 
     def _download_file(
         self,
@@ -419,11 +393,6 @@ class DownloadManager:
             downloaded_bytes += file.bytes_downloaded
         snapshot.completed_files = completed_files
         snapshot.downloaded_bytes = downloaded_bytes
-
-
-# ---------------------------------------------------------------------------
-# Path safety helper
-# ---------------------------------------------------------------------------
 
 
 def snapshot_file_path(snapshot: BookSnapshot, remote_full_path: str) -> Path:

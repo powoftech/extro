@@ -9,10 +9,6 @@ from typing import Any
 from sqlalchemy import JSON, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-# ---------------------------------------------------------------------------
-# Status enumerations
-# ---------------------------------------------------------------------------
-
 
 class SnapshotStatus(StrEnum):
     """Lifecycle states for a :class:`BookSnapshot`."""
@@ -28,11 +24,6 @@ class FileStatus(StrEnum):
     PENDING = "pending"
     COMPLETED = "completed"
     FAILED = "failed"
-
-
-# ---------------------------------------------------------------------------
-# ORM base and models
-# ---------------------------------------------------------------------------
 
 
 class Base(DeclarativeBase):

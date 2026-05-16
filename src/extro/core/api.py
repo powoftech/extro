@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import random
+import secrets
 import time
-from typing import Any, Literal
+from typing import Literal, Protocol, cast
 
 import curl_cffi
 from pydantic import BaseModel, ConfigDict, Field
@@ -14,10 +14,6 @@ from extro.core.http import BROWSER_HEADERS
 SearchField = Literal["title", "publishers", "authors", "isbn"]
 
 API_BASE_URL = "https://learning.oreilly.com/api/v2"
-
-# ---------------------------------------------------------------------------
-# Response models
-# ---------------------------------------------------------------------------
 
 
 class SearchResult(BaseModel):
@@ -78,11 +74,6 @@ class FilesManifest(BaseModel):
     results: list[FilesManifestItem] = Field(default_factory=list)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
 def normalize_book_identifier(value: str) -> str:
     cleaned = value.strip().rstrip("/")
     if not cleaned:
@@ -96,12 +87,15 @@ def normalize_book_identifier(value: str) -> str:
     return cleaned.rsplit("/", maxsplit=1)[-1]
 
 
-# ---------------------------------------------------------------------------
-# Client
-# ---------------------------------------------------------------------------
-
 _DEFAULT_DELAY_MIN: float = 0.75
 _DEFAULT_DELAY_MAX: float = 1.0
+
+
+class _JsonResponse(Protocol):
+    url: str
+
+    def raise_for_status(self) -> None: ...
+    def json(self) -> dict[str, str] | list[dict[str, str]]: ...
 
 
 class OreillyClient:
@@ -126,97 +120,89 @@ class OreillyClient:
         self._delay_min = delay_min
         self._delay_max = delay_max
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def search(self, keyword: str, *, field: SearchField = "title") -> SearchResponse:
-        response = curl_cffi.get(
-            f"{self._base_url}/search/",
-            params={
-                "formats": "book",
-                "languages": "en",
-                "include_facets": "false",
-                "field": field,
-                "query": keyword,
-                "sort": "popularity",
-                "order": "desc",
-                "limit": "10",
-            },
-            headers=BROWSER_HEADERS,
-            http_version="v2",
-            allow_redirects=True,
-            verify=True,
-            impersonate="chrome146",
-            timeout=self._timeout,
+        response = cast(
+            "_JsonResponse",
+            curl_cffi.get(
+                f"{self._base_url}/search/",
+                params={
+                    "formats": "book",
+                    "languages": "en",
+                    "include_facets": "false",
+                    "field": field,
+                    "query": keyword,
+                    "sort": "popularity",
+                    "order": "desc",
+                    "limit": "10",
+                },
+                headers=BROWSER_HEADERS,
+                http_version="v2",
+                allow_redirects=True,
+                verify=True,
+                impersonate="chrome146",
+                timeout=self._timeout,
+            ),
         )
         response.raise_for_status()
-        return SearchResponse.model_validate(response.json())
+        data = response.json()
+        return SearchResponse.model_validate(data)
 
     def fetch_metadata(self, identifier: str) -> BookMetadata:
         book_id = normalize_book_identifier(identifier)
         data = self._get_json(f"{self._base_url}/epubs/urn:orm:book:{book_id}/")
         return BookMetadata.model_validate(data)
 
-    def fetch_spine(self, metadata: BookMetadata) -> dict[str, Any]:
+    def fetch_spine(self, metadata: BookMetadata) -> object:
         return self._get_json(metadata.spine, params={"limit": "1000"})
 
-    def fetch_files(self, metadata: BookMetadata) -> dict[str, Any]:
+    def fetch_files(self, metadata: BookMetadata) -> object:
         return self._get_json(metadata.files, params={"limit": "10000"})
 
     def fetch_table_of_contents(self, metadata: BookMetadata) -> object:
         return self._get_json_or_list(metadata.table_of_contents)
 
-    def fetch_chapters(self, metadata: BookMetadata) -> dict[str, Any]:
+    def fetch_chapters(self, metadata: BookMetadata) -> object:
         return self._get_json(metadata.chapters, params={"limit": "1000"})
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
     def _random_delay(self) -> None:
-        time.sleep(random.uniform(self._delay_min, self._delay_max))  # noqa: S311
+        time.sleep(secrets.SystemRandom().uniform(self._delay_min, self._delay_max))
 
     def _get_json(
         self,
         url: str,
         *,
         params: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
+    ) -> object:
         self._random_delay()
-        response = curl_cffi.get(
-            url,
-            params=params,
-            headers=BROWSER_HEADERS,
-            http_version="v2",
-            allow_redirects=True,
-            verify=True,
-            impersonate="chrome146",
-            timeout=self._timeout,
+        response = cast(
+            "_JsonResponse",
+            curl_cffi.get(
+                url,
+                params=params,
+                headers=BROWSER_HEADERS,
+                http_version="v2",
+                allow_redirects=True,
+                verify=True,
+                impersonate="chrome146",
+                timeout=self._timeout,
+            ),
         )
-        print(response.url)
         response.raise_for_status()
-        data = response.json()
-        if not isinstance(data, dict):
-            msg = f"Expected object response from {url}"
-            raise TypeError(msg)
-        return data
+        return response.json()
 
     def _get_json_or_list(self, url: str) -> object:
         self._random_delay()
-        response = curl_cffi.get(
-            url,
-            headers=BROWSER_HEADERS,
-            http_version="v2",
-            allow_redirects=True,
-            verify=True,
-            impersonate="chrome146",
-            timeout=self._timeout,
+        response = cast(
+            "_JsonResponse",
+            curl_cffi.get(
+                url,
+                headers=BROWSER_HEADERS,
+                http_version="v2",
+                allow_redirects=True,
+                verify=True,
+                impersonate="chrome146",
+                timeout=self._timeout,
+            ),
         )
-        print(response.url)
         response.raise_for_status()
-        data = response.json()
-        if not isinstance(data, (dict, list)):
-            msg = f"Expected object or array response from {url}"
-            raise TypeError(msg)
-        return data
+        return response.json()

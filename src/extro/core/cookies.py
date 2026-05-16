@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import platform
 import subprocess
-import sys
 import time
 from typing import TYPE_CHECKING, cast
 
@@ -49,9 +49,14 @@ def oreilly_cookies_from_profile(profile_dir: Path) -> dict[str, str]:
 
 
 def is_firefox_running() -> bool:
-    if sys.platform == "win32":
+    if platform.system() == "Windows":
         result = subprocess.run(
-            ["tasklist", "/FI", "IMAGENAME eq firefox.exe", "/NH"],  # noqa: S607
+            [
+                "C:/Windows/System32/tasklist.exe",
+                "/FI",
+                "IMAGENAME eq firefox.exe",
+                "/NH",
+            ],
             capture_output=True,
             text=True,
             check=False,
@@ -60,8 +65,9 @@ def is_firefox_running() -> bool:
             line.lower().startswith("firefox.exe")
             for line in result.stdout.splitlines()
         )
+
     result = subprocess.run(
-        ["pgrep", "-x", "firefox"],  # noqa: S607
+        ["/usr/bin/pgrep", "-x", "firefox"],
         capture_output=True,
         text=True,
         check=False,

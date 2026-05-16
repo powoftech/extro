@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import configparser
 import os
-import sys
+import platform
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,14 +24,15 @@ class FirefoxProfile:
 
 def _profiles_ini_path() -> Path:
     """Return the platform-specific path to Firefox's profiles.ini."""
-    if sys.platform == "win32":
+    system = platform.system()
+    if system == "Windows":
         appdata = os.getenv("APPDATA")
         if not appdata:
             msg = "APPDATA environment variable is not set."
             raise FirefoxNotFoundError(msg)
         return Path(appdata) / "Mozilla" / "Firefox" / "profiles.ini"
 
-    if sys.platform == "darwin":
+    if system == "Darwin":
         return (
             Path.home() / "Library" / "Application Support" / "Firefox" / "profiles.ini"
         )
