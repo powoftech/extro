@@ -45,8 +45,8 @@ warn_unreachable = true
 warn_no_return = true
 
 [[tool.mypy.overrides]]
-module = ["questionary", "questionary.*", "platformdirs"]
-ignore_missing_imports = true
+module = ["extro.*"]
+follow_untyped_imports = true
 
 [tool.pytest]
 pythonpath = ["src"]
