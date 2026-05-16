@@ -28,10 +28,10 @@ jobs:
         run: uv sync --all-groups
 
       - name: Ruff - lint
-        run: uv run ruff check src/ tests/
-
+        run: uv run ruff check
+        
       - name: Ruff - format check
-        run: uv run ruff format --check src/ tests/
+        run: uv run ruff format --check
 
       - name: mypy - type check
         run: uv run mypy src/extro

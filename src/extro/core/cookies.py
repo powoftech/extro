@@ -3,9 +3,9 @@ from __future__ import annotations
 import platform
 import subprocess
 import time
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
-import browsercookie  # type: ignore[import-untyped]
+import browsercookie
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
@@ -15,7 +15,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from extro.core.exceptions import ConfigError
 
 if TYPE_CHECKING:
-    from http.cookiejar import CookieJar
     from pathlib import Path
 
 OREILLY_HOME_URL = "https://learning.oreilly.com/home2/"
@@ -40,7 +39,7 @@ def oreilly_cookies_from_profile(profile_dir: Path) -> dict[str, str]:
         msg = f"No Firefox cookies found in selected profile: {profile_dir}"
         raise ConfigError(msg)
 
-    cookiejar = cast("CookieJar", browsercookie.firefox(cookie_files=cookie_files))
+    cookiejar = browsercookie.firefox(cookie_files=cookie_files)
     cookies: dict[str, str] = {}
     for cookie in cookiejar:
         if "oreilly" in cookie.domain.lower() and cookie.value is not None:

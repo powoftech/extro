@@ -39,7 +39,10 @@ class Book(Base):
     isbn: Mapped[str | None] = mapped_column(String(64), nullable=True)
     title: Mapped[str] = mapped_column(String(500))
     language: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    latest_last_modified_time: Mapped[str] = mapped_column(String(64), index=True)
+    authors: Mapped[list[str]] = mapped_column(JSON, default=list)
+    publishers: Mapped[list[str]] = mapped_column(JSON, default=list)
+    publication_date: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    latest_version: Mapped[str] = mapped_column(String(64), index=True)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(
         default=lambda: datetime.now(UTC),
@@ -62,14 +65,14 @@ class BookSnapshot(Base):
     __table_args__ = (
         UniqueConstraint(
             "book_id",
-            "last_modified_time",
+            "version",
             name="uq_book_snapshots_book_version",
         ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     book_id: Mapped[int] = mapped_column(ForeignKey("books.id", ondelete="CASCADE"))
-    last_modified_time: Mapped[str] = mapped_column(String(64), index=True)
+    version: Mapped[str] = mapped_column(String(64), index=True)
     snapshot_path: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(
         String(32),

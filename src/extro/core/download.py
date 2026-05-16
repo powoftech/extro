@@ -12,7 +12,9 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import curl_cffi
 import questionary
+from rich.panel import Panel
 from rich.progress import BarColumn, DownloadColumn, Progress, TextColumn
+from rich.table import Table
 from sqlalchemy import Select, select
 
 from extro.core.api import (
@@ -140,10 +142,11 @@ class DownloadManager:
 
         metadata = self._api_client.fetch_metadata(identifier)
         book = self._upsert_book(metadata.model_dump(mode="json"))
+        self._print_book_metadata(metadata)
         previous_completed = self._latest_completed_snapshot(book.id)
         existing_snapshot = self._snapshot_for_version(
             book.id,
-            metadata.last_modified_time,
+            metadata.version,
         )
 
         if (
@@ -155,10 +158,10 @@ class DownloadManager:
         if (
             existing_snapshot is None
             and previous_completed is not None
-            and previous_completed.last_modified_time != metadata.last_modified_time
+            and previous_completed.version != metadata.version
             and not self._confirm_new_version(
                 previous_completed,
-                metadata.last_modified_time,
+                metadata.version,
             )
         ):
             msg = "Download cancelled."
@@ -166,7 +169,7 @@ class DownloadManager:
 
         snapshot = existing_snapshot or self._create_snapshot(
             book,
-            metadata.last_modified_time,
+            metadata.version,
         )
         snapshot.status = SnapshotStatus.DOWNLOADING
         self._session.commit()
@@ -190,7 +193,7 @@ class DownloadManager:
     def _confirm_new_version(
         self,
         previous_snapshot: BookSnapshot,
-        new_last_modified_time: str,
+        new_version: str,
     ) -> bool:
         """Prompt the user whether to download a newer version.
 
@@ -199,13 +202,29 @@ class DownloadManager:
         answer = questionary.confirm(
             (
                 "A newer version is available "
-                f"({previous_snapshot.last_modified_time} -> "
-                f"{new_last_modified_time}). "
+                f"({previous_snapshot.version} -> "
+                f"{new_version}). "
                 "Download it?"
             ),
             default=True,
         ).ask()
         return bool(answer)
+
+    def _print_book_metadata(self, metadata: BookMetadata) -> None:
+        details = Table.grid(padding=(0, 2))
+        details.add_column(style="bold cyan", no_wrap=True)
+        details.add_column()
+        details.add_row("Title", metadata.title)
+        details.add_row("Authors", _format_list(metadata.authors))
+        details.add_row("Publishers", _format_list(metadata.publishers))
+        details.add_row("Publication Date", metadata.publication_date or "-")
+        self._console.print(
+            Panel(
+                details,
+                title="[bold cyan]Book[/bold cyan]",
+                border_style="cyan",
+            )
+        )
 
     def _fetch_manifests(self, metadata: BookMetadata) -> dict[str, Any]:
         return {
@@ -241,7 +260,10 @@ class DownloadManager:
                 isbn=metadata.get("isbn"),
                 title=str(metadata["title"]),
                 language=metadata.get("language"),
-                latest_last_modified_time=str(metadata["last_modified_time"]),
+                authors=metadata.get("authors", []),
+                publishers=metadata.get("publishers", []),
+                publication_date=metadata.get("publication_date"),
+                latest_version=str(metadata["version"]),
                 metadata_json=metadata,
             )
             self._session.add(book)
@@ -250,18 +272,19 @@ class DownloadManager:
             book.isbn = metadata.get("isbn")
             book.title = str(metadata["title"])
             book.language = metadata.get("language")
-            book.latest_last_modified_time = str(metadata["last_modified_time"])
+            book.authors = metadata.get("authors", [])
+            book.publishers = metadata.get("publishers", [])
+            book.publication_date = metadata.get("publication_date")
+            book.latest_version = str(metadata["version"])
             book.metadata_json = metadata
         self._session.commit()
         return book
 
-    def _create_snapshot(self, book: Book, last_modified_time: str) -> BookSnapshot:
-        snapshot_path = (
-            downloads_dir() / book.identifier / safe_snapshot_name(last_modified_time)
-        )
+    def _create_snapshot(self, book: Book, version: str) -> BookSnapshot:
+        snapshot_path = downloads_dir() / book.identifier / safe_snapshot_name(version)
         snapshot = BookSnapshot(
             book_id=book.id,
-            last_modified_time=last_modified_time,
+            version=version,
             snapshot_path=str(snapshot_path),
             status=SnapshotStatus.PENDING,
         )
@@ -276,18 +299,18 @@ class DownloadManager:
                 BookSnapshot.book_id == book_id,
                 BookSnapshot.status == SnapshotStatus.COMPLETED,
             )
-            .order_by(BookSnapshot.last_modified_time.desc())
+            .order_by(BookSnapshot.version.desc())
         )
         return self._session.scalars(stmt).first()
 
     def _snapshot_for_version(
         self,
         book_id: int,
-        last_modified_time: str,
+        version: str,
     ) -> BookSnapshot | None:
         stmt: Select[tuple[BookSnapshot]] = select(BookSnapshot).where(
             BookSnapshot.book_id == book_id,
-            BookSnapshot.last_modified_time == last_modified_time,
+            BookSnapshot.version == version,
         )
         return self._session.scalars(stmt).one_or_none()
 
@@ -393,6 +416,10 @@ class DownloadManager:
             downloaded_bytes += file.bytes_downloaded
         snapshot.completed_files = completed_files
         snapshot.downloaded_bytes = downloaded_bytes
+
+
+def _format_list(values: list[str]) -> str:
+    return ", ".join(values) if values else "-"
 
 
 def snapshot_file_path(snapshot: BookSnapshot, remote_full_path: str) -> Path:

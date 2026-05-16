@@ -7,7 +7,14 @@ import time
 from typing import Literal, Protocol, cast
 
 import curl_cffi
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from extro.core.http import BROWSER_HEADERS
 
@@ -45,14 +52,51 @@ class BookMetadata(BaseModel):
     ourn: str
     identifier: str
     isbn: str | None = None
-    title: str
+    title: str = Field(validation_alias=AliasChoices("title", "name"))
     language: str | None = None
-    issued: str
-    last_modified_time: str
-    spine: str
-    files: str
-    table_of_contents: str
-    chapters: str
+    publication_date: str | None = None
+    version: str = Field(validation_alias=AliasChoices("version", "last_modified_time"))
+    authors: list[str] = Field(default_factory=list)
+    publishers: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _extract_people(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+
+        normalized = dict(data)
+        if "authors" not in normalized:
+            talent = normalized.get("talent")
+            contributors = (
+                talent.get("contributors", []) if isinstance(talent, dict) else []
+            )
+            normalized["authors"] = [
+                contributor["name"]
+                for contributor in contributors
+                if isinstance(contributor, dict)
+                and contributor.get("contributor_type") == "author"
+                and isinstance(contributor.get("name"), str)
+            ]
+        return normalized
+
+    @field_validator("publishers", mode="before")
+    @classmethod
+    def _publisher_names(cls, value: object) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        names: list[str] = []
+        for item in value:
+            if isinstance(item, str):
+                names.append(item)
+            elif isinstance(item, dict) and isinstance(item.get("name"), str):
+                names.append(item["name"])
+        return names
+
+    @field_validator("version", mode="before")
+    @classmethod
+    def _string_version(cls, value: object) -> str:
+        return str(value)
 
 
 class FilesManifestItem(BaseModel):
@@ -95,7 +139,7 @@ class _JsonResponse(Protocol):
     url: str
 
     def raise_for_status(self) -> None: ...
-    def json(self) -> dict[str, str] | list[dict[str, str]]: ...
+    def json(self) -> object: ...
 
 
 class OreillyClient:
@@ -149,20 +193,31 @@ class OreillyClient:
 
     def fetch_metadata(self, identifier: str) -> BookMetadata:
         book_id = normalize_book_identifier(identifier)
-        data = self._get_json(f"{self._base_url}/epubs/urn:orm:book:{book_id}/")
+        data = self._get_json(f"{self._base_url}/metadata/urn:orm:book:{book_id}/")
         return BookMetadata.model_validate(data)
 
     def fetch_spine(self, metadata: BookMetadata) -> object:
-        return self._get_json(metadata.spine, params={"limit": "1000"})
+        return self._get_json(
+            f"{self._base_url}/epubs/{metadata.ourn}/spine/",
+            params={"limit": "1000"},
+        )
 
     def fetch_files(self, metadata: BookMetadata) -> object:
-        return self._get_json(metadata.files, params={"limit": "10000"})
+        return self._get_json(
+            f"{self._base_url}/epubs/{metadata.ourn}/files/",
+            params={"limit": "10000"},
+        )
 
     def fetch_table_of_contents(self, metadata: BookMetadata) -> object:
-        return self._get_json_or_list(metadata.table_of_contents)
+        return self._get_json_or_list(
+            f"{self._base_url}/epubs/{metadata.ourn}/table-of-contents/",
+        )
 
     def fetch_chapters(self, metadata: BookMetadata) -> object:
-        return self._get_json(metadata.chapters, params={"limit": "1000"})
+        return self._get_json(
+            f"{self._base_url}/epub-chapters/",
+            params={"epub_identifier": metadata.ourn, "limit": "1000"},
+        )
 
     def _random_delay(self) -> None:
         time.sleep(secrets.SystemRandom().uniform(self._delay_min, self._delay_max))

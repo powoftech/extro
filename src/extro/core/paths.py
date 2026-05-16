@@ -26,5 +26,5 @@ def downloads_dir() -> Path:
     return path
 
 
-def safe_snapshot_name(last_modified_time: str) -> str:
-    return _SAFE_TIMESTAMP_RE.sub("_", last_modified_time).strip("._") or "unknown"
+def safe_snapshot_name(version: str) -> str:
+    return _SAFE_TIMESTAMP_RE.sub("_", version).strip("._") or "unknown"
