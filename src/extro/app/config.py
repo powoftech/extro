@@ -7,7 +7,7 @@ from typing import Any
 import platformdirs
 from pydantic import BaseModel, field_validator
 
-from extro.core.exceptions import ConfigError
+from extro.app.exceptions import ConfigError
 
 _APP_NAME = "extro"
 _CONFIG_FILE = "config.json"

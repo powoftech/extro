@@ -9,9 +9,9 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from extro.core.config import AppConfig
-from extro.core.exceptions import ExtroError, FirefoxNotFoundError, NoProfilesError
-from extro.core.firefox import FirefoxProfile, get_firefox_profiles
+from extro.app.config import AppConfig
+from extro.app.exceptions import ExtroError, FirefoxNotFoundError, NoProfilesError
+from extro.platform.firefox import FirefoxProfile, get_firefox_profiles
 
 if TYPE_CHECKING:
     from pathlib import Path

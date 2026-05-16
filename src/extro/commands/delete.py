@@ -10,20 +10,20 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
-from extro.commands.status import (
-    _format_progress,
-    _snapshot_path_exists,
+from extro.app.exceptions import ExtroError
+from extro.app.paths import downloads_dir
+from extro.downloads.status import (
     find_book,
+    format_progress,
     snapshot_details,
+    snapshot_path_exists,
 )
-from extro.core.database import session_scope, upgrade_database
-from extro.core.exceptions import ExtroError
-from extro.core.paths import downloads_dir
+from extro.storage.database import session_scope, upgrade_database
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
-    from extro.core.models import Book, BookSnapshot
+    from extro.storage.models import Book, BookSnapshot
 
 console = Console()
 err_console = Console(stderr=True)
@@ -97,10 +97,9 @@ def delete_snapshots(
 
 
 def _snapshot_choice_title(snapshot: BookSnapshot) -> str:
-    exists = "local:yes" if _snapshot_path_exists(snapshot) else "local:no"
+    exists = "local:yes" if snapshot_path_exists(snapshot) else "local:no"
     return (
-        f"{snapshot.version} "
-        f"({snapshot.status}, {_format_progress(snapshot)}, {exists})"
+        f"{snapshot.version} ({snapshot.status}, {format_progress(snapshot)}, {exists})"
     )
 
 

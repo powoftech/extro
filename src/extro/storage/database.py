@@ -10,7 +10,7 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session, sessionmaker
 
-from extro.core.paths import database_path
+from extro.app.paths import database_path
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

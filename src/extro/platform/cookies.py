@@ -12,7 +12,7 @@ from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.support.ui import WebDriverWait
 
-from extro.core.exceptions import ConfigError
+from extro.app.exceptions import ConfigError
 
 if TYPE_CHECKING:
     from pathlib import Path

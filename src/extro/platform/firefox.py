@@ -6,7 +6,7 @@ import platform
 from dataclasses import dataclass
 from pathlib import Path
 
-from extro.core.exceptions import FirefoxNotFoundError, NoProfilesError
+from extro.app.exceptions import FirefoxNotFoundError, NoProfilesError
 
 
 @dataclass(frozen=True)

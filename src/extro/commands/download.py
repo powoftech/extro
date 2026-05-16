@@ -9,11 +9,11 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
-from extro.core.api import OreillyClient
-from extro.core.config import AppConfig
-from extro.core.database import session_scope, upgrade_database
-from extro.core.download import DownloadManager
-from extro.core.exceptions import ConfigError, ExtroError
+from extro.app.config import AppConfig
+from extro.app.exceptions import ConfigError, ExtroError
+from extro.downloads.manager import DownloadManager
+from extro.oreilly.client import OreillyClient
+from extro.storage.database import session_scope, upgrade_database
 
 console = Console()
 err_console = Console(stderr=True)

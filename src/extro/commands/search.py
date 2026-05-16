@@ -1,21 +1,22 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import curl_cffi
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from extro.core.api import (
-    OreillyClient,
-    SearchField,
-    SearchParams,
-    SearchResult,
-    SearchSort,
-    SearchSortOrder,
-)
+from extro.oreilly.client import OreillyClient, SearchParams
+
+if TYPE_CHECKING:
+    from extro.oreilly.schemas import (
+        SearchField,
+        SearchResult,
+        SearchSort,
+        SearchSortOrder,
+    )
 
 console = Console()
 err_console = Console(stderr=True)
