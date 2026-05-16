@@ -1,10 +1,38 @@
+"""SQLAlchemy ORM models and status enumerations for extro."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import JSON, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+# ---------------------------------------------------------------------------
+# Status enumerations
+# ---------------------------------------------------------------------------
+
+
+class SnapshotStatus(StrEnum):
+    """Lifecycle states for a :class:`BookSnapshot`."""
+
+    PENDING = "pending"
+    DOWNLOADING = "downloading"
+    COMPLETED = "completed"
+
+
+class FileStatus(StrEnum):
+    """Lifecycle states for a :class:`BookFile`."""
+
+    PENDING = "pending"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+# ---------------------------------------------------------------------------
+# ORM base and models
+# ---------------------------------------------------------------------------
 
 
 class Base(DeclarativeBase):
@@ -52,7 +80,11 @@ class BookSnapshot(Base):
     book_id: Mapped[int] = mapped_column(ForeignKey("books.id", ondelete="CASCADE"))
     last_modified_time: Mapped[str] = mapped_column(String(64), index=True)
     snapshot_path: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        default=SnapshotStatus.PENDING,
+        index=True,
+    )
     total_files: Mapped[int] = mapped_column(default=0)
     completed_files: Mapped[int] = mapped_column(default=0)
     total_bytes: Mapped[int] = mapped_column(default=0)
@@ -97,7 +129,11 @@ class BookFile(Base):
         String(64),
         nullable=True,
     )
-    status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        default=FileStatus.PENDING,
+        index=True,
+    )
     bytes_downloaded: Mapped[int] = mapped_column(default=0)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

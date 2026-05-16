@@ -1,3 +1,5 @@
+"""CLI command: download an O'Reilly book snapshot."""
+
 from __future__ import annotations
 
 from typing import Annotated
@@ -8,9 +10,10 @@ from rich.console import Console
 from rich.panel import Panel
 
 from extro.core.api import OreillyClient
+from extro.core.config import AppConfig
 from extro.core.database import session_scope, upgrade_database
 from extro.core.download import DownloadManager
-from extro.core.exceptions import ExtroError
+from extro.core.exceptions import ConfigError, ExtroError
 
 console = Console()
 err_console = Console(stderr=True)
@@ -23,6 +26,21 @@ def download_command(
     ],
 ) -> None:
     """Download a book snapshot and resume incomplete downloads."""
+    # Load config at the command boundary so domain classes stay decoupled.
+    try:
+        app_config = AppConfig.load()
+    except ConfigError as exc:
+        err_console.print(f"[bold red]Config error:[/bold red] {exc}")
+        raise typer.Exit(1) from exc
+
+    if app_config.firefox_profile_dir is None:
+        err_console.print(
+            "[bold red]Config error:[/bold red] "
+            "Run [bold]extro config[/bold] before downloading so Firefox cookies "
+            "can be read."
+        )
+        raise typer.Exit(1)
+
     try:
         upgrade_database()
         with session_scope() as session:
@@ -31,7 +49,10 @@ def download_command(
                 session=session,
                 console=console,
             )
-            snapshot_path = manager.download(book_identifier)
+            snapshot_path = manager.download(
+                book_identifier,
+                profile_dir=app_config.firefox_profile_dir,
+            )
     except (
         ExtroError,
         curl_cffi.CurlError,

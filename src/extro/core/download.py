@@ -1,6 +1,9 @@
+"""Download orchestration for O'Reilly book snapshots."""
+
 from __future__ import annotations
 
 import json
+import logging
 import random
 import time
 from collections.abc import Callable
@@ -19,21 +22,37 @@ from extro.core.api import (
     OreillyClient,
     normalize_book_identifier,
 )
-from extro.core.config import AppConfig
 from extro.core.cookies import (
     oreilly_cookies_from_profile,
     refresh_cookies_via_firefox,
 )
-from extro.core.exceptions import ConfigError, ExtroError
-from extro.core.models import Book, BookFile, BookSnapshot
+from extro.core.exceptions import ExtroError
+from extro.core.http import make_session
+from extro.core.models import (
+    Book,
+    BookFile,
+    BookSnapshot,
+    FileStatus,
+    SnapshotStatus,
+)
 from extro.core.paths import downloads_dir, safe_snapshot_name
-
-_AUTH_FAILURE_STATUS_CODES = {401, 403}
-_PARTIAL_CONTENT_STATUS_CODE = 206
 
 if TYPE_CHECKING:
     from rich.console import Console
     from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
+
+_AUTH_FAILURE_STATUS_CODES = {401, 403}
+
+# Default inter-request jitter bounds (seconds)
+_DELAY_MIN: float = 0.5
+_DELAY_MAX: float = 1.0
+
+
+# ---------------------------------------------------------------------------
+# Protocols for dependency injection / testability
+# ---------------------------------------------------------------------------
 
 
 class CurlResponse(Protocol):
@@ -46,18 +65,30 @@ class CurlResponse(Protocol):
 
 
 class CurlSession(Protocol):
-    def get(
-        self,
-        url: str,
-    ) -> CurlResponse: ...
+    def get(self, url: str) -> CurlResponse: ...
 
 
-ConfirmDownload = Callable[[BookSnapshot | None, str], bool]
+# ---------------------------------------------------------------------------
+# Type aliases
+# ---------------------------------------------------------------------------
+
 Sleep = Callable[[float], None]
 RandomDelay = Callable[[], float]
 
 
+# ---------------------------------------------------------------------------
+# Cookie-authenticated HTTP client
+# ---------------------------------------------------------------------------
+
+
 class CookieFileClient:
+    """HTTP client that authenticates using Firefox cookies.
+
+    Unlike :class:`~extro.core.api.OreillyClient`, this client attaches
+    session cookies to every request.  It is used exclusively to download
+    the actual book-asset files from the CDN, which require authentication.
+    """
+
     def __init__(self, profile_dir: Path) -> None:
         self._profile_dir = profile_dir
         self._session = self._new_session()
@@ -70,21 +101,17 @@ class CookieFileClient:
             raise TypeError(msg)
         return data
 
-    def get_bytes(
-        self,
-        url: str,
-    ) -> CurlResponse:
+    def get_bytes(self, url: str) -> CurlResponse:
         return self._get_with_refresh(url)
 
-    def _get_with_refresh(
-        self,
-        url: str,
-    ) -> CurlResponse:
+    def _get_with_refresh(self, url: str) -> CurlResponse:
         response = self._session.get(url)
         if response.status_code not in _AUTH_FAILURE_STATUS_CODES:
             response.raise_for_status()
             return response
 
+        # Auth expired — refresh cookies via a headless Firefox session.
+        logger.debug("Auth failure for %s; refreshing Firefox cookies.", url)
         refresh_cookies_via_firefox(self._profile_dir)
         self._session = self._new_session()
         response = self._session.get(url)
@@ -95,78 +122,52 @@ class CookieFileClient:
         cookies = oreilly_cookies_from_profile(self._profile_dir)
         return cast(
             "CurlSession",
-            curl_cffi.Session(
-                # impersonate="chrome146",
-                cookies=cookies,
-                headers={
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-                    "Accept-Encoding": "gzip, deflate, br, zstd",
-                    "Accept-Language": "en-US,en;q=0.9",
-                    "Connection": "keep-alive",
-                    "Sec-Fetch-Dest": "document",
-                    "Sec-Fetch-Mode": "navigate",
-                    "Sec-Fetch-Site": "none",
-                    "Sec-Fetch-User": "?1",
-                    "Sec-Gpc": "1",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
-                    "sec-ch-ua": '"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"',
-                    "sec-ch-ua-mobile": "?0",
-                    "sec-ch-ua-platform": "Windows",
-                    "DNT": "1",
-                },
-                http_version="v2",
-                allow_redirects=True,
-                verify=True,
-            ),
+            make_session(cookies=cookies),
         )
 
 
-def default_confirm_new_version(
-    previous_snapshot: BookSnapshot | None,
-    new_last_modified_time: str,
-) -> bool:
-    if previous_snapshot is None:
-        return True
-
-    answer = questionary.confirm(
-        (
-            "A newer version is available "
-            f"({previous_snapshot.last_modified_time} -> {new_last_modified_time}). "
-            "Download it?"
-        ),
-        default=True,
-    ).ask()
-    return bool(answer)
+# ---------------------------------------------------------------------------
+# Download manager
+# ---------------------------------------------------------------------------
 
 
 class DownloadManager:
-    def __init__(
+    """Orchestrates fetching and persisting a complete O'Reilly book snapshot."""
+
+    def __init__(  # noqa: PLR0913
         self,
         *,
         api_client: OreillyClient,
         session: Session,
         console: Console,
         cookie_client_factory: Callable[[Path], CookieFileClient] = CookieFileClient,
-        confirm_new_version: ConfirmDownload = default_confirm_new_version,
         sleep: Sleep = time.sleep,
-        random_delay: RandomDelay = lambda: random.uniform(1, 2),
+        random_delay: RandomDelay = lambda: random.uniform(  # noqa: S311
+            _DELAY_MIN, _DELAY_MAX
+        ),
     ) -> None:
         self._api_client = api_client
         self._session = session
         self._console = console
         self._cookie_client_factory = cookie_client_factory
-        self._confirm_new_version = confirm_new_version
         self._sleep = sleep
         self._random_delay = random_delay
 
-    def download(self, book_identifier: str) -> Path:
+    def download(self, book_identifier: str, *, profile_dir: Path) -> Path:
+        """Download (or resume) a book snapshot.
+
+        Args:
+            book_identifier: O'Reilly book identifier, URN, or URL.
+            profile_dir: Path to the Firefox profile directory used for
+                cookie-authenticated file downloads.
+
+        Returns:
+            The local :class:`~pathlib.Path` to the completed snapshot directory.
+
+        Raises:
+            ExtroError: On user cancellation or unsafe file paths.
+        """
         identifier = normalize_book_identifier(book_identifier)
-        app_config = AppConfig.load()
-        if app_config.firefox_profile_dir is None:
-            msg = (
-                "Run `extro config` before downloading so Firefox cookies can be read."
-            )
-            raise ConfigError(msg)
 
         metadata = self._api_client.fetch_metadata(identifier)
         book = self._upsert_book(metadata.model_dump(mode="json"))
@@ -176,7 +177,10 @@ class DownloadManager:
             metadata.last_modified_time,
         )
 
-        if existing_snapshot is not None and existing_snapshot.status == "completed":
+        if (
+            existing_snapshot is not None
+            and existing_snapshot.status == SnapshotStatus.COMPLETED
+        ):
             return Path(existing_snapshot.snapshot_path)
 
         if (
@@ -195,7 +199,7 @@ class DownloadManager:
             book,
             metadata.last_modified_time,
         )
-        snapshot.status = "downloading"
+        snapshot.status = SnapshotStatus.DOWNLOADING
         self._session.commit()
 
         snapshot_path = Path(snapshot.snapshot_path)
@@ -204,20 +208,45 @@ class DownloadManager:
         manifests = self._fetch_manifests(metadata)
         self._write_manifests(snapshot_path, manifests)
 
-        cookie_client = self._cookie_client_factory(app_config.firefox_profile_dir)
+        cookie_client = self._cookie_client_factory(profile_dir)
         files_manifest = FilesManifest.model_validate(manifests["files"])
         self._sync_file_rows(snapshot, files_manifest.results)
         self._download_files(cookie_client, snapshot)
 
-        snapshot.status = "completed"
+        snapshot.status = SnapshotStatus.COMPLETED
         self._refresh_snapshot_progress(snapshot)
         self._session.commit()
         return snapshot_path
 
-    def _fetch_manifests(
+    # ------------------------------------------------------------------
+    # Version confirmation (injectable for testing)
+    # ------------------------------------------------------------------
+
+    def _confirm_new_version(
         self,
-        metadata: BookMetadata,
-    ) -> dict[str, Any]:
+        previous_snapshot: BookSnapshot,
+        new_last_modified_time: str,
+    ) -> bool:
+        """Prompt the user whether to download a newer version.
+
+        Subclasses or tests may override this method to skip the prompt.
+        """
+        answer = questionary.confirm(
+            (
+                "A newer version is available "
+                f"({previous_snapshot.last_modified_time} -> "
+                f"{new_last_modified_time}). "
+                "Download it?"
+            ),
+            default=True,
+        ).ask()
+        return bool(answer)
+
+    # ------------------------------------------------------------------
+    # Manifest fetching and writing
+    # ------------------------------------------------------------------
+
+    def _fetch_manifests(self, metadata: BookMetadata) -> dict[str, Any]:
         return {
             "metadata": metadata.model_dump(mode="json"),
             "spine": self._api_client.fetch_spine(metadata),
@@ -226,7 +255,11 @@ class DownloadManager:
             "chapters": self._api_client.fetch_chapters(metadata),
         }
 
-    def _write_manifests(self, snapshot_path: Path, manifests: dict[str, Any]) -> None:
+    def _write_manifests(
+        self,
+        snapshot_path: Path,
+        manifests: dict[str, Any],
+    ) -> None:
         manifest_dir = snapshot_path / "manifests"
         manifest_dir.mkdir(parents=True, exist_ok=True)
         for name, payload in manifests.items():
@@ -234,6 +267,10 @@ class DownloadManager:
                 json.dumps(payload, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
+
+    # ------------------------------------------------------------------
+    # Database helpers
+    # ------------------------------------------------------------------
 
     def _upsert_book(self, metadata: dict[str, Any]) -> Book:
         stmt: Select[tuple[Book]] = select(Book).where(
@@ -269,7 +306,7 @@ class DownloadManager:
             book_id=book.id,
             last_modified_time=last_modified_time,
             snapshot_path=str(snapshot_path),
-            status="pending",
+            status=SnapshotStatus.PENDING,
         )
         self._session.add(snapshot)
         self._session.commit()
@@ -280,7 +317,7 @@ class DownloadManager:
             select(BookSnapshot)
             .where(
                 BookSnapshot.book_id == book_id,
-                BookSnapshot.status == "completed",
+                BookSnapshot.status == SnapshotStatus.COMPLETED,
             )
             .order_by(BookSnapshot.last_modified_time.desc())
         )
@@ -321,7 +358,7 @@ class DownloadManager:
                     media_type=item.media_type,
                     file_size=item.file_size,
                     remote_last_modified_time=item.last_modified_time,
-                    status="pending",
+                    status=FileStatus.PENDING,
                     bytes_downloaded=0,
                 )
                 self._session.add(row)
@@ -330,7 +367,7 @@ class DownloadManager:
             row.file_size = item.file_size
             row.remote_last_modified_time = item.last_modified_time
             if completed:
-                row.status = "completed"
+                row.status = FileStatus.COMPLETED
                 row.bytes_downloaded = item.file_size or 0
                 row.last_error = None
         snapshot.total_files = len(files)
@@ -338,12 +375,18 @@ class DownloadManager:
         self._refresh_snapshot_progress(snapshot)
         self._session.commit()
 
+    # ------------------------------------------------------------------
+    # File downloading
+    # ------------------------------------------------------------------
+
     def _download_files(
         self,
         cookie_client: CookieFileClient,
         snapshot: BookSnapshot,
     ) -> None:
-        pending = [file for file in snapshot.files if file.status != "completed"]
+        pending = [
+            file for file in snapshot.files if file.status != FileStatus.COMPLETED
+        ]
         if not pending:
             return
 
@@ -376,22 +419,32 @@ class DownloadManager:
         target_path = snapshot_file_path(snapshot, file.full_path)
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
-        response = cookie_client.get_bytes(file.url)
-        target_path.write_bytes(response.content)
-
-        file.status = "completed"
-        file.bytes_downloaded = target_path.stat().st_size
-        file.last_error = None
+        try:
+            response = cookie_client.get_bytes(file.url)
+            target_path.write_bytes(response.content)
+            file.status = FileStatus.COMPLETED
+            file.bytes_downloaded = target_path.stat().st_size
+            file.last_error = None
+        except (curl_cffi.CurlError, OSError) as exc:
+            error_msg = str(exc)
+            logger.warning("Failed to download %s: %s", file.url, error_msg)
+            file.status = FileStatus.FAILED
+            file.last_error = error_msg
 
     def _refresh_snapshot_progress(self, snapshot: BookSnapshot) -> None:
         completed_files = 0
         downloaded_bytes = 0
         for file in snapshot.files:
-            if file.status == "completed":
+            if file.status == FileStatus.COMPLETED:
                 completed_files += 1
             downloaded_bytes += file.bytes_downloaded
         snapshot.completed_files = completed_files
         snapshot.downloaded_bytes = downloaded_bytes
+
+
+# ---------------------------------------------------------------------------
+# Path safety helper
+# ---------------------------------------------------------------------------
 
 
 def snapshot_file_path(snapshot: BookSnapshot, remote_full_path: str) -> Path:

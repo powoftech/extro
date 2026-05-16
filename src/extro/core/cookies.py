@@ -51,7 +51,7 @@ def oreilly_cookies_from_profile(profile_dir: Path) -> dict[str, str]:
 def is_firefox_running() -> bool:
     if sys.platform == "win32":
         result = subprocess.run(
-            ["tasklist", "/FI", "IMAGENAME eq firefox.exe", "/NH"],
+            ["tasklist", "/FI", "IMAGENAME eq firefox.exe", "/NH"],  # noqa: S607
             capture_output=True,
             text=True,
             check=False,
@@ -61,7 +61,7 @@ def is_firefox_running() -> bool:
             for line in result.stdout.splitlines()
         )
     result = subprocess.run(
-        ["pgrep", "-x", "firefox"],
+        ["pgrep", "-x", "firefox"],  # noqa: S607
         capture_output=True,
         text=True,
         check=False,

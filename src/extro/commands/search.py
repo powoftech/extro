@@ -36,6 +36,7 @@ def _build_results_table(results: list[SearchResult]) -> Table:
     table.add_column("Authors", overflow="fold")
     table.add_column("Publishers", overflow="fold")
     table.add_column("ISBN", no_wrap=True)
+    table.add_column("Issued", no_wrap=True)
     table.add_column("Modified", no_wrap=True)
     # table.add_column("Popularity", justify="right", no_wrap=True)
     # table.add_column("URL", overflow="fold")
@@ -47,6 +48,7 @@ def _build_results_table(results: list[SearchResult]) -> Table:
             _format_list(result.authors),
             _format_list(result.publishers),
             result.isbn or "-",
+            result.issued or "-",
             result.last_modified_time or "-",
             # str(result.popularity) if result.popularity is not None else "-",
             # result.web_url or "-",
