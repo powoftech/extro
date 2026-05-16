@@ -59,5 +59,5 @@ def make_session(
         allow_redirects=True,
         verify=True,
         timeout=timeout,
-        impersonate="chrome146"
+        impersonate="chrome146",
     )

@@ -8,7 +8,7 @@ import random
 import time
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any
 
 import curl_cffi
 import questionary
@@ -51,24 +51,6 @@ _DELAY_MAX: float = 1.0
 
 
 # ---------------------------------------------------------------------------
-# Protocols for dependency injection / testability
-# ---------------------------------------------------------------------------
-
-
-class CurlResponse(Protocol):
-    status_code: int
-    content: bytes
-
-    def json(self) -> object: ...
-
-    def raise_for_status(self) -> None: ...
-
-
-class CurlSession(Protocol):
-    def get(self, url: str) -> CurlResponse: ...
-
-
-# ---------------------------------------------------------------------------
 # Type aliases
 # ---------------------------------------------------------------------------
 
@@ -101,10 +83,10 @@ class CookieFileClient:
             raise TypeError(msg)
         return data
 
-    def get_bytes(self, url: str) -> CurlResponse:
+    def get_bytes(self, url: str) -> curl_cffi.Response:
         return self._get_with_refresh(url)
 
-    def _get_with_refresh(self, url: str) -> CurlResponse:
+    def _get_with_refresh(self, url: str) -> curl_cffi.Response:
         response = self._session.get(url)
         if response.status_code not in _AUTH_FAILURE_STATUS_CODES:
             response.raise_for_status()
@@ -118,12 +100,9 @@ class CookieFileClient:
         response.raise_for_status()
         return response
 
-    def _new_session(self) -> CurlSession:
+    def _new_session(self) -> curl_cffi.Session[curl_cffi.Response]:
         cookies = oreilly_cookies_from_profile(self._profile_dir)
-        return cast(
-            "CurlSession",
-            make_session(cookies=cookies),
-        )
+        return make_session(cookies=cookies)
 
 
 # ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 import time
-from typing import Any, Literal, Protocol
+from typing import Any, Literal
 
 import curl_cffi
 from pydantic import BaseModel, ConfigDict, Field
@@ -94,26 +94,6 @@ def normalize_book_identifier(value: str) -> str:
         return cleaned.split(marker, maxsplit=1)[1].split("/", maxsplit=1)[0]
 
     return cleaned.rsplit("/", maxsplit=1)[-1]
-
-
-# ---------------------------------------------------------------------------
-# Typed protocols for curl_cffi (no stubs available)
-# ---------------------------------------------------------------------------
-
-
-class _ApiResponse(Protocol):
-    def raise_for_status(self) -> None: ...
-
-    def json(self) -> object: ...
-
-
-class _ApiSession(Protocol):
-    def get(
-        self,
-        url: str,
-        *,
-        params: dict[str, str] | None = None,
-    ) -> _ApiResponse: ...
 
 
 # ---------------------------------------------------------------------------
