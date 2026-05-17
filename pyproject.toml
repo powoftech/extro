@@ -23,9 +23,8 @@ extro = "extro.main:app"
 
 [dependency-groups]
 dev = [
-  "mypy>=2.1.0",
-  "pyinstaller>=6.13.0",
-  "pytest>=9.0.3",
+  "pyright[nodejs]>=1.1.409",
+  # "pytest>=9.0.3",
   "ruff>=0.15.12",
 ]
 
@@ -36,25 +35,21 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/extro"]
 
-[tool.mypy]
-python_version = "3.14"
-mypy_path = "src,typings"
-strict = true
-pretty = true
-warn_unreachable = true
-warn_no_return = true
-explicit_package_bases = true
+[tool.pyright]
+include = ["./src"]
+exclude = ["**/node_modules", "**/__pycache__", "**/.venv", "**/.*"]
+pythonVersion = "3.14"
+pythonPlatform = "Linux"
+verboseOutput = true
+stubPath = "./typings"
 
-[[tool.mypy.overrides]]
-module = ["extro.*"]
-follow_untyped_imports = true
-
-[tool.pytest]
-pythonpath = ["src"]
-testpaths = ["tests"]
+# [tool.pytest]
+# pythonpath = ["src"]
+# testpaths = ["tests"]
 
 [tool.ruff]
 target-version = "py314"
+exclude = ["typings"]
 
 [tool.ruff.format]
 line-ending = "lf"

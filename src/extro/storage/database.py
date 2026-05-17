@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from extro.app.paths import database_path
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator
 
 
 def sqlite_url(path: Path | None = None) -> str:
@@ -44,7 +44,7 @@ def upgrade_database(path: Path | None = None) -> None:
 
 
 @contextmanager
-def session_scope(path: Path | None = None) -> Iterator[Session]:
+def session_scope(path: Path | None = None) -> Generator[Session]:
     factory = create_session_factory(path)
     session = factory()
     try:

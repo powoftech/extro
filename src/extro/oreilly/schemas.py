@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import (
     AliasChoices,
@@ -45,7 +45,7 @@ class SearchResult(BaseModel):
 class SearchResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    results: list[SearchResult] = Field(default_factory=list)
+    results: list[SearchResult] = Field(default_factory=list[SearchResult])
     total: int = 0
     page: int = 0
 
@@ -69,17 +69,14 @@ class BookMetadata(BaseModel):
         if not isinstance(data, dict):
             return data
 
-        normalized = dict(data)
+        normalized = cast("dict[str, Any]", data)
         if "authors" not in normalized:
-            talent = normalized.get("talent")
-            contributors = (
-                talent.get("contributors", []) if isinstance(talent, dict) else []
-            )
+            talent = cast("dict[str, Any]", normalized.get("talent"))
+            contributors = cast("list[dict[str, Any]]", talent.get("contributors", []))
             normalized["authors"] = [
                 contributor["name"]
                 for contributor in contributors
-                if isinstance(contributor, dict)
-                and contributor.get("contributor_type") == "author"
+                if contributor.get("contributor_type") == "author"
                 and isinstance(contributor.get("name"), str)
             ]
         return normalized
@@ -89,11 +86,14 @@ class BookMetadata(BaseModel):
     def _publisher_names(cls, value: object) -> list[str]:
         if not isinstance(value, list):
             return []
+
+        normalized = cast("list[dict[str, Any]]", value)
+
         names: list[str] = []
-        for item in value:
+        for item in normalized:
             if isinstance(item, str):
                 names.append(item)
-            elif isinstance(item, dict) and isinstance(item.get("name"), str):
+            elif isinstance(item.get("name"), str):
                 names.append(item["name"])
         return names
 
@@ -119,4 +119,4 @@ class FilesManifest(BaseModel):
     count: int
     next: str | None = None
     previous: str | None = None
-    results: list[FilesManifestItem] = Field(default_factory=list)
+    results: list[FilesManifestItem] = Field(default_factory=list[FilesManifestItem])
