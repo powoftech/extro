@@ -36,12 +36,14 @@ build-backend = "hatchling.build"
 packages = ["src/extro"]
 
 [tool.pyright]
+strict = ["./src"]
 include = ["./src"]
 exclude = ["**/node_modules", "**/__pycache__", "**/.venv", "**/.*"]
+typeCheckingMode = "strict"
+stubPath = "./typings"
 pythonVersion = "3.14"
 pythonPlatform = "Linux"
 verboseOutput = true
-stubPath = "./typings"
 
 # [tool.pytest]
 # pythonpath = ["src"]
