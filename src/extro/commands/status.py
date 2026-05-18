@@ -44,6 +44,7 @@ def _build_summary_table(
     table.add_column("Local\nSnapshots", justify="right", no_wrap=True)
     table.add_column("Latest\nVersion", no_wrap=True)
     table.add_column("Latest\nStatus", no_wrap=True)
+    table.add_column("Latest\nIntegrity", no_wrap=True)
     table.add_column("Progress", overflow="fold")
     table.add_column("Paths", no_wrap=True)
 
@@ -59,6 +60,7 @@ def _build_summary_table(
             str(summary.local_snapshot_count),
             ms_epoch_to_iso8601(latest.version) if latest is not None else "-",
             latest.status if latest is not None else "-",
+            summary.latest_integrity_state or "-",
             format_progress(latest),
             summary.local_path_state,
         )
@@ -96,6 +98,7 @@ def _build_snapshot_table(details: list[SnapshotStatusDetail]) -> Table:
     table.add_column("Progress", overflow="fold")
     table.add_column("Directory", no_wrap=True)
     table.add_column("Local Files", justify="right", no_wrap=True)
+    table.add_column("Integrity", no_wrap=True)
     table.add_column("Path", overflow="fold")
 
     for detail in details:
@@ -107,6 +110,7 @@ def _build_snapshot_table(details: list[SnapshotStatusDetail]) -> Table:
             format_progress(snapshot),
             "yes" if detail.directory_exists else "no",
             f"{detail.local_file_count}/{detail.db_file_count}",
+            detail.integrity_state,
             snapshot.snapshot_path,
         )
     return table

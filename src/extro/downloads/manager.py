@@ -19,6 +19,7 @@ from sqlalchemy import Select, select
 
 from extro.app.exceptions import ExtroError
 from extro.app.paths import downloads_dir, safe_snapshot_name
+from extro.downloads.integrity import hash_file, make_read_only
 from extro.downloads.paths import snapshot_file_path
 from extro.oreilly.files import CookieFileClient
 from extro.oreilly.identifiers import normalize_book_identifier
@@ -346,6 +347,8 @@ class DownloadManager:
         try:
             response = cookie_client.get_bytes(file.url)
             target_path.write_bytes(response.content)
+            file.content_sha256 = hash_file(target_path)
+            make_read_only(target_path)
             file.status = FileStatus.COMPLETED
             file.bytes_downloaded = target_path.stat().st_size
             file.last_error = None

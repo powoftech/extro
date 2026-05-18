@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from extro.app.exceptions import ExtroError
-from extro.app.paths import downloads_dir
+from extro.app.paths import downloads_dir, export_file_stem, exports_dir
 from extro.downloads.status import (
     find_book,
     format_progress,
@@ -36,6 +36,7 @@ class DeleteResult:
     deleted_snapshots: int
     removed_directories: int
     missing_directories: int
+    removed_exports: int
     deleted_book: bool
 
 
@@ -44,6 +45,19 @@ def _managed_snapshot_path(snapshot: BookSnapshot) -> Path:
     path = Path(snapshot.snapshot_path).resolve()
     if path == root or root not in path.parents:
         msg = f"Refusing to delete snapshot outside extro downloads directory: {path}"
+        raise ExtroError(msg)
+    return path
+
+
+def _managed_export_base_path(book: Book, snapshot: BookSnapshot) -> Path:
+    root = exports_dir().resolve()
+    path = root / export_file_stem(
+        book.title,
+        snapshot.version,
+        fallback=book.identifier,
+    )
+    if path == root or root not in path.parents:
+        msg = f"Refusing to delete export outside extro exports directory: {path}"
         raise ExtroError(msg)
     return path
 
@@ -61,21 +75,37 @@ def _remove_snapshot_directories(snapshots: list[BookSnapshot]) -> tuple[int, in
     return removed, missing
 
 
+def _remove_export_files(book: Book, snapshots: list[BookSnapshot]) -> int:
+    removed = 0
+    for snapshot in snapshots:
+        base_path = _managed_export_base_path(book, snapshot)
+        for path in sorted(base_path.parent.glob(f"{base_path.name}.*")):
+            if not path.is_file():
+                continue
+            path.unlink()
+            removed += 1
+    return removed
+
+
 def delete_snapshots(
     session: Session,
     book: Book,
     snapshot_ids: set[int],
+    *,
+    remove_exports: bool = False,
 ) -> DeleteResult:
-    """Delete selected snapshot rows and their local directories."""
+    """Delete selected snapshot rows and their local directories or exports."""
     selected = [snapshot for snapshot in book.snapshots if snapshot.id in snapshot_ids]
     if not selected:
         return DeleteResult(
             deleted_snapshots=0,
             removed_directories=0,
             missing_directories=0,
+            removed_exports=0,
             deleted_book=False,
         )
 
+    removed_exports = _remove_export_files(book, selected) if remove_exports else 0
     removed, missing = _remove_snapshot_directories(selected)
     remaining = [
         snapshot for snapshot in book.snapshots if snapshot.id not in snapshot_ids
@@ -92,6 +122,7 @@ def delete_snapshots(
         deleted_snapshots=len(selected),
         removed_directories=removed,
         missing_directories=missing,
+        removed_exports=removed_exports,
         deleted_book=deleted_book,
     )
 
@@ -145,6 +176,18 @@ def delete_command(
                 console.print("[dim]No snapshots selected.[/dim]")
                 return
 
+            selected_snapshots = [
+                snapshot for snapshot in book.snapshots if snapshot.id in selected
+            ]
+            export_paths: list[Path] = []
+            for snapshot in selected_snapshots:
+                base_path = _managed_export_base_path(book, snapshot)
+                export_paths.extend(
+                    path
+                    for path in sorted(base_path.parent.glob(f"{base_path.name}.*"))
+                    if path.is_file()
+                )
+
             deleting_all = len(selected) == len(book.snapshots)
             prompt = (
                 "Delete all selected snapshots and the book database row?"
@@ -156,7 +199,21 @@ def delete_command(
                 console.print("[dim]Aborted - no snapshots deleted.[/dim]")
                 return
 
-            result = delete_snapshots(session, book, set(selected))
+            remove_exports = False
+            if export_paths:
+                remove_exports = bool(
+                    questionary.confirm(
+                        f"Delete {len(export_paths)} converted file(s) from exports/?",
+                        default=False,
+                    ).ask()
+                )
+
+            result = delete_snapshots(
+                session,
+                book,
+                set(selected),
+                remove_exports=remove_exports,
+            )
     except ExtroError as exc:
         err_console.print(f"[bold red]Delete failed:[/bold red] {exc}")
         raise typer.Exit(1) from exc
@@ -167,7 +224,8 @@ def delete_command(
             "[bold green]Deleted snapshots:[/bold green] "
             f"{result.deleted_snapshots}\n"
             f"Removed directories: {result.removed_directories}\n"
-            f"Missing directories: {result.missing_directories}"
+            f"Missing directories: {result.missing_directories}\n"
+            f"Removed exports: {result.removed_exports}"
             f"{book_message if result.deleted_book else ''}",
             title="[bold green]Delete Complete[/bold green]",
             border_style="green",

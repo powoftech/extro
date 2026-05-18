@@ -123,6 +123,7 @@ class BookFile(Base):
         String(64),
         nullable=True,
     )
+    content_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(
         String(32),
         default=FileStatus.PENDING,

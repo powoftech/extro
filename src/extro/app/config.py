@@ -8,14 +8,14 @@ import platformdirs
 from pydantic import BaseModel, field_validator
 
 from extro.app.exceptions import ConfigError
+from extro.app.version import APP_NAME
 
-_APP_NAME = "extro"
 _CONFIG_FILE = "config.json"
 
 
 def _config_path() -> Path:
     """Return the platform-appropriate path for extro's config file."""
-    config_dir = Path(platformdirs.user_config_dir(_APP_NAME, appauthor=False))
+    config_dir = Path(platformdirs.user_config_dir(APP_NAME, appauthor=False))
     config_dir.mkdir(parents=True, exist_ok=True)
     return config_dir / _CONFIG_FILE
 

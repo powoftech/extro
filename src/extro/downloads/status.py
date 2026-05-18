@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from extro.app.exceptions import ExtroError
 from extro.app.paths import downloads_dir
+from extro.downloads.integrity import IntegrityState, verify_snapshot
 from extro.downloads.paths import snapshot_file_path
 from extro.oreilly.identifiers import normalize_book_identifier
 from extro.storage.models import Book, BookSnapshot
@@ -27,6 +28,7 @@ class BookStatusSummary:
     local_snapshot_count: int
     local_path_state: str
     latest_snapshot: BookSnapshot | None
+    latest_integrity_state: IntegrityState | None
 
 
 @dataclass(frozen=True)
@@ -37,6 +39,7 @@ class SnapshotStatusDetail:
     directory_exists: bool
     local_file_count: int
     db_file_count: int
+    integrity_state: IntegrityState
 
 
 def format_bytes(value: int) -> str:
@@ -95,12 +98,14 @@ def local_snapshot_dir_count(book: Book) -> int:
 
 def book_summary(book: Book) -> BookStatusSummary:
     snapshots = list(book.snapshots)
+    latest = latest_snapshot(book)
     return BookStatusSummary(
         book=book,
         snapshot_count=len(snapshots),
         local_snapshot_count=local_snapshot_dir_count(book),
         local_path_state=local_path_state(snapshots),
-        latest_snapshot=latest_snapshot(book),
+        latest_snapshot=latest,
+        latest_integrity_state=verify_snapshot(latest).state if latest else None,
     )
 
 
@@ -171,6 +176,7 @@ def snapshot_details(book: Book) -> list[SnapshotStatusDetail]:
             directory_exists=snapshot_path_exists(snapshot),
             local_file_count=local_file_count(snapshot),
             db_file_count=len(snapshot.files),
+            integrity_state=verify_snapshot(snapshot).state,
         )
         for snapshot in snapshots
     ]

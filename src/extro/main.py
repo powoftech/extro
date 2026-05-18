@@ -2,21 +2,25 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 import typer
 from rich.console import Console
 
-from extro import __version__
+from extro.app.version import APP_NAME, get_app_version
 from extro.commands.config import config_command
 from extro.commands.convert import convert_command
 from extro.commands.delete import delete_command
 from extro.commands.download import download_command
+from extro.commands.reset import reset_command
 from extro.commands.search import search_command
 from extro.commands.status import status_command
+from extro.commands.verify import verify_command
 
 console = Console()
 
 app = typer.Typer(
-    name="extro",
+    name=APP_NAME,
     help=(
         "[bold cyan]extro[/bold cyan]\n\nRun [bold]extro config[/bold] to get started."
     ),
@@ -28,24 +32,25 @@ app = typer.Typer(
 )
 
 
-def _version_callback(value: str | None) -> None:
-    if value is not None:
-        console.print(f"extro [bold cyan]{__version__}[/bold cyan]")
+def _version_callback(*, value: bool) -> None:
+    if value:
+        console.print(f"{APP_NAME} [bold cyan]{get_app_version()}[/bold cyan]")
         raise typer.Exit
 
 
 @app.callback()
 def main(
-    version: str | None = typer.Option(
-        None,
-        "--version",
-        "-V",
-        help="Show the application version and exit.",
-        callback=_version_callback,
-        is_eager=True,
-        is_flag=True,
-        flag_value="1",
-    ),
+    *,
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            "-V",
+            help="Show the application version and exit.",
+            callback=_version_callback,
+            is_eager=True,
+        ),
+    ] = False,
 ) -> None:
     """extro"""
 
@@ -72,9 +77,17 @@ app.command(
     help="Show database and local filesystem status for downloaded books.",
 )(status_command)
 app.command(
+    name="verify",
+    help="Verify downloaded file hashes and read-only protection.",
+)(verify_command)
+app.command(
     name="delete",
     help="Delete one or more downloaded snapshots for a book.",
 )(delete_command)
+app.command(
+    name="reset",
+    help="Delete all books, snapshots, and local download assets.",
+)(reset_command)
 
 
 if __name__ == "__main__":
