@@ -7,6 +7,7 @@ from rich.console import Console
 
 from extro import __version__
 from extro.commands.config import config_command
+from extro.commands.convert import convert_command
 from extro.commands.delete import delete_command
 from extro.commands.download import download_command
 from extro.commands.search import search_command
@@ -62,6 +63,10 @@ app.command(
     name="download",
     help="Download an O'Reilly book snapshot and resume progress.",
 )(download_command)
+app.command(
+    name="convert",
+    help="Convert an O'Reilly book snapshot to Send to Kindle-compatible EPUB.",
+)(convert_command)
 app.command(
     name="status",
     help="Show database and local filesystem status for downloaded books.",

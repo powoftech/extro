@@ -19,17 +19,6 @@ if TYPE_CHECKING:
 console = Console()
 err_console = Console(stderr=True)
 
-_QUESTIONARY_STYLE = questionary.Style(
-    [
-        ("qmark", "fg:#5fd7ff bold"),
-        ("question", "fg:#ffffff bold"),
-        ("pointer", "fg:#5fd7ff bold"),
-        ("highlighted", "fg:#5fd7ff bold"),
-        ("selected", "fg:#5fd7ff"),
-        ("answer", "fg:#5fd7ff bold"),
-    ]
-)
-
 
 def _build_profile_table(
     profiles: list[FirefoxProfile],
@@ -125,8 +114,7 @@ def config_command() -> None:
         "Select a Firefox profile to use:",
         choices=choices,
         default=default_profile,  # type: ignore
-        style=_QUESTIONARY_STYLE,
-        instruction="(↑↓ to move, Enter to confirm)",
+        instruction="(up/down to move, enter to confirm)",
     ).ask()
 
     if selected is None:

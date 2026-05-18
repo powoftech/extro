@@ -6,8 +6,10 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
   "alembic>=1.18.4",
+  "beautifulsoup4>=4.14.3",
   "browsercookie>=0.8.2",
   "curl-cffi>=0.15.0",
+  "defusedxml>=0.7.1",
   "keyring>=25.7.0",
   "platformdirs>=4.9.6",
   "pydantic>=2.13.4",
@@ -24,7 +26,7 @@ extro = "extro.main:app"
 [dependency-groups]
 dev = [
   "pyright[nodejs]>=1.1.409",
-  # "pytest>=9.0.3",
+  "pytest>=9.0.3",
   "ruff>=0.15.12",
 ]
 
@@ -45,9 +47,9 @@ pythonVersion = "3.14"
 pythonPlatform = "Linux"
 verboseOutput = true
 
-# [tool.pytest]
-# pythonpath = ["src"]
-# testpaths = ["tests"]
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
 
 [tool.ruff]
 target-version = "py314"
