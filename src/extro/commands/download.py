@@ -45,7 +45,9 @@ def download_command(
         upgrade_database()
         with session_scope() as session:
             manager = DownloadManager(
-                api_client=OreillyClient(),
+                api_client=OreillyClient(
+                    profile_dir=app_config.firefox_profile_dir,
+                ),
                 session=session,
                 console=console,
             )

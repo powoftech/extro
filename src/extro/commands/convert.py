@@ -72,9 +72,9 @@ def _download_latest_snapshot(
     session: Session,
     client: OreillyClient,
     book_identifier: str,
+    profile_dir: Path,
     skip_new_version_prompt: bool,
 ) -> None:
-    profile_dir = _require_firefox_profile()
     manager_class = (
         _AutoConfirmDownloadManager if skip_new_version_prompt else DownloadManager
     )
@@ -133,7 +133,7 @@ def _maybe_download_missing_latest(
     client: OreillyClient,
     book: Book,
     metadata: BookMetadata,
-    book_identifier: str,
+    profile_dir: Path,
 ) -> Book:
     completed_versions = {
         detail.snapshot.version for detail in _convertible_snapshot_details(book)
@@ -153,10 +153,11 @@ def _maybe_download_missing_latest(
         _download_latest_snapshot(
             session=session,
             client=client,
-            book_identifier=book_identifier,
+            book_identifier=metadata.identifier,
+            profile_dir=profile_dir,
             skip_new_version_prompt=True,
         )
-        updated = find_book(session, book_identifier)
+        updated = find_book(session, metadata.identifier)
         if updated is None:
             msg = "Downloaded snapshot, but the book row could not be reloaded."
             raise ExtroError(msg)
@@ -170,6 +171,7 @@ def _ensure_book_with_snapshot(
     client: OreillyClient,
     book_identifier: str,
     metadata: BookMetadata,
+    profile_dir: Path,
 ) -> Book:
     book = find_book(session, book_identifier)
     if book is None or not _convertible_snapshot_details(book):
@@ -180,6 +182,7 @@ def _ensure_book_with_snapshot(
             session=session,
             client=client,
             book_identifier=metadata.identifier,
+            profile_dir=profile_dir,
             skip_new_version_prompt=False,
         )
         book = find_book(session, book_identifier)
@@ -193,7 +196,7 @@ def _ensure_book_with_snapshot(
         client=client,
         book=book,
         metadata=metadata,
-        book_identifier=book_identifier,
+        profile_dir=profile_dir,
     )
 
 
@@ -277,8 +280,9 @@ def convert_command(
     ] = False,
 ) -> None:
     """Convert a downloaded O'Reilly book snapshot to EPUB."""
-    client = OreillyClient()
     try:
+        profile_dir = _require_firefox_profile()
+        client = OreillyClient(profile_dir=profile_dir)
         identifier = normalize_book_identifier(book_identifier)
         metadata = client.fetch_metadata(identifier)
         upgrade_database()
@@ -288,6 +292,7 @@ def convert_command(
                 client=client,
                 book_identifier=identifier,
                 metadata=metadata,
+                profile_dir=profile_dir,
             )
             selected = _select_snapshot(book)
             if selected is None:

@@ -15,6 +15,9 @@ if TYPE_CHECKING:
 
 
 class _FakeClient:
+    def __init__(self, **_kwargs: Any) -> None:
+        pass
+
     def fetch_metadata(self, identifier: str) -> BookMetadata:
         return BookMetadata.model_validate(
             {
@@ -75,6 +78,10 @@ def test_convert_audit_hidden_reports_without_writing_epub(tmp_path, monkeypatch
     db_path = tmp_path / "extro.db"
     snapshot_path = _write_snapshot(tmp_path / "snapshot")
     monkeypatch.setattr(database_module, "database_path", lambda: db_path)
+    monkeypatch.setattr(
+        "extro.commands.convert._require_firefox_profile",
+        lambda: tmp_path,
+    )
     monkeypatch.setattr("extro.commands.convert.OreillyClient", _FakeClient)
     monkeypatch.setattr(
         "extro.commands.convert.questionary.select",

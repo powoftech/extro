@@ -1,15 +1,17 @@
-"""Unauthenticated O'Reilly Learning API client."""
+"""O'Reilly Learning API client."""
 
 from __future__ import annotations
 
+import logging
 import secrets
 import time
 from dataclasses import dataclass
-from typing import Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 import curl_cffi
 
-from extro.oreilly.http import BROWSER_HEADERS
+from extro.app.exceptions import ConfigError
+from extro.oreilly.http import BROWSER_HEADERS, make_session
 from extro.oreilly.identifiers import normalize_book_identifier
 from extro.oreilly.schemas import (
     BookMetadata,
@@ -18,12 +20,22 @@ from extro.oreilly.schemas import (
     SearchSort,
     SearchSortOrder,
 )
+from extro.platform.cookies import (
+    oreilly_cookies_from_profile,
+    refresh_cookies_via_firefox,
+)
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 API_BASE_URL = "https://learning.oreilly.com/api/v2"
 SEARCH_LIMIT_MIN = 1
 SEARCH_LIMIT_MAX = 200
 _DEFAULT_DELAY_MIN: float = 0.75
 _DEFAULT_DELAY_MAX: float = 1.0
+_AUTH_FAILURE_STATUS_CODES = {401, 403}
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -37,18 +49,27 @@ class SearchParams:
 
 class _JsonResponse(Protocol):
     url: str
+    status_code: int
 
     def raise_for_status(self) -> None: ...
     def json(self) -> object: ...
 
 
-class OreillyClient:
-    """Unauthenticated client for the public O'Reilly Learning API.
+class _JsonSession(Protocol):
+    def get(
+        self,
+        url: str,
+        *,
+        params: dict[str, str] | None = None,
+    ) -> _JsonResponse: ...
 
-    All endpoints accessed here (search, metadata, spine, files, TOC,
-    chapters) are reachable without authentication cookies. File-download
-    CDN URLs, by contrast, require session cookies and are handled by
-    :class:`extro.oreilly.files.CookieFileClient`.
+
+class OreillyClient:
+    """Client for the O'Reilly Learning API.
+
+    Search remains unauthenticated. Metadata and manifest endpoints use
+    cookies from the configured Firefox profile because O'Reilly may require
+    an active authenticated session for book-specific JSON.
     """
 
     def __init__(
@@ -58,11 +79,14 @@ class OreillyClient:
         timeout: float = 30.0,
         delay_min: float = _DEFAULT_DELAY_MIN,
         delay_max: float = _DEFAULT_DELAY_MAX,
+        profile_dir: Path | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
         self._delay_min = delay_min
         self._delay_max = delay_max
+        self._profile_dir = profile_dir
+        self._session: _JsonSession | None = None
 
     def search(
         self,
@@ -105,7 +129,6 @@ class OreillyClient:
             ),
         )
         response.raise_for_status()
-        # print(response.url)
         data = response.json()
         return SearchResponse.model_validate(data)
 
@@ -147,18 +170,45 @@ class OreillyClient:
         params: dict[str, str] | None = None,
     ) -> object:
         self._random_delay()
-        response = cast(
-            "_JsonResponse",
-            curl_cffi.get(
-                url,
-                params=params,
-                headers=BROWSER_HEADERS,
-                http_version="v2",
-                allow_redirects=True,
-                verify=True,
-                impersonate="chrome146",
-                timeout=self._timeout,
-            ),
-        )
+        response = self._get_with_refresh(url, params=params)
         response.raise_for_status()
         return response.json()
+
+    def _get_with_refresh(
+        self,
+        url: str,
+        *,
+        params: dict[str, str] | None = None,
+    ) -> _JsonResponse:
+        response = self._get_session().get(url, params=params)
+        if response.status_code not in _AUTH_FAILURE_STATUS_CODES:
+            return response
+
+        if self._profile_dir is None:
+            raise self._missing_profile_error()
+
+        logger.debug("Auth failure for %s; refreshing Firefox cookies.", url)
+        refresh_cookies_via_firefox(self._profile_dir)
+        self._session = self._new_session()
+        return self._get_session().get(url, params=params)
+
+    def _get_session(self) -> _JsonSession:
+        if self._session is None:
+            self._session = self._new_session()
+        return self._session
+
+    def _new_session(self) -> _JsonSession:
+        if self._profile_dir is None:
+            raise self._missing_profile_error()
+
+        cookies = oreilly_cookies_from_profile(self._profile_dir)
+        return cast(
+            "_JsonSession",
+            make_session(cookies=cookies, timeout=self._timeout),
+        )
+
+    def _missing_profile_error(self) -> ConfigError:
+        return ConfigError(
+            "Run extro config before fetching O'Reilly book metadata so Firefox "
+            "cookies can be read."
+        )
