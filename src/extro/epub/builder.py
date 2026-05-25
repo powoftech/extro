@@ -13,7 +13,6 @@ from urllib.parse import unquote, urldefrag, urlparse
 
 from bs4 import BeautifulSoup
 from defusedxml import ElementTree
-from soupsieve.util import SelectorSyntaxError
 
 from extro.app.exceptions import ExtroError
 from extro.app.paths import safe_export_stem
@@ -35,8 +34,6 @@ _CSS_MEDIA_TYPES: Final = {"text/css"}
 _HTML_FILE_LIMIT: Final = 300
 _HTML_SIZE_LIMIT_BYTES: Final = 30 * 1024 * 1024
 _ERROR_SAMPLE_LIMIT: Final = 10
-_HIDDEN_TEXT_SAMPLE_LIMIT: Final = 160
-_HIDDEN_AUDIT_FINDING_LIMIT: Final = 10
 KINDLE_HIDDEN_CHARACTER_LIMIT: Final = 10_000
 _SAFE_FILENAME_RE: Final = re.compile(r"[^A-Za-z0-9_. -]+")
 _DISPLAY_NONE_RE: Final = re.compile(
@@ -47,11 +44,6 @@ _DISPLAY_NONE_DECLARATION_RE: Final = re.compile(
     r"display\s*:\s*none(?P<important>\s*!important)?",
     re.IGNORECASE,
 )
-_CSS_COMMENT_RE: Final = re.compile(r"/\*.*?\*/", re.DOTALL)
-_CSS_RULE_RE: Final = re.compile(
-    r"(?P<selectors>[^{}]+)\{(?P<body>[^{}]*)\}",
-    re.DOTALL,
-)
 
 
 @dataclass(frozen=True)
@@ -61,31 +53,6 @@ class EpubBuildResult:
     output_path: Path
     html_file_count: int
     manifest_item_count: int
-
-
-@dataclass(frozen=True)
-class HiddenContentFinding:
-    """One generated XHTML block that Kindle may count as hidden text."""
-
-    href: str
-    source: str
-    character_count: int
-    sample: str
-
-
-@dataclass(frozen=True)
-class HiddenContentAuditResult:
-    """Hidden-content summary for generated EPUB XHTML."""
-
-    html_file_count: int
-    total_hidden_characters: int
-    findings: tuple[HiddenContentFinding, ...]
-    hidden_character_limit: int = KINDLE_HIDDEN_CHARACTER_LIMIT
-
-    @property
-    def affected_file_count(self) -> int:
-        """Number of generated XHTML files containing hidden text."""
-        return len({finding.href for finding in self.findings})
 
 
 @dataclass(frozen=True)
@@ -102,12 +69,6 @@ class _SnapshotContext:
     items: list[_ManifestItem]
     html_items: list[_ManifestItem]
     css_items: list[_ManifestItem]
-
-
-@dataclass(frozen=True)
-class _HiddenCssRule:
-    href: str
-    selector: str
 
 
 def safe_epub_filename(title: str, *, fallback: str) -> str:
@@ -168,45 +129,6 @@ def build_epub(
         html_file_count=len(context.html_items),
         manifest_item_count=len(context.items),
     )
-
-
-def audit_hidden_content(
-    snapshot_path: Path,
-    *,
-    title: str,
-) -> HiddenContentAuditResult:
-    """Audit generated EPUB XHTML for hidden text counted by Kindle Previewer."""
-    context = _snapshot_context(snapshot_path)
-    css_hrefs = [item.href for item in context.css_items]
-    css_rules = _hidden_css_rules(context.files_dir, context.css_items)
-
-    findings: list[HiddenContentFinding] = []
-    for item in context.html_items:
-        source_path = _safe_source_path(context.files_dir, item.href)
-        content = _clean_html(
-            source_path.read_text(encoding="utf-8"),
-            href=item.href,
-            title=title,
-            css_hrefs=css_hrefs,
-        )
-        _validate_html(content, item.href)
-        findings.extend(_audit_html_hidden_content(content, item.href, css_rules))
-
-    sorted_findings = tuple(
-        sorted(findings, key=lambda finding: finding.character_count, reverse=True)
-    )
-    return HiddenContentAuditResult(
-        html_file_count=len(context.html_items),
-        total_hidden_characters=sum(
-            finding.character_count for finding in sorted_findings
-        ),
-        findings=sorted_findings,
-    )
-
-
-def hidden_audit_finding_limit() -> int:
-    """Default number of top hidden-content findings to show in CLI output."""
-    return _HIDDEN_AUDIT_FINDING_LIMIT
 
 
 def _snapshot_context(snapshot_path: Path) -> _SnapshotContext:
@@ -429,96 +351,6 @@ def _append_inline_style(tag: Tag, declaration: str) -> None:
         tag["style"] = f"{style.rstrip()}{separator} {declaration}"
         return
     tag["style"] = declaration
-
-
-def _hidden_css_rules(
-    files_dir: Path,
-    css_items: list[_ManifestItem],
-) -> tuple[_HiddenCssRule, ...]:
-    rules: list[_HiddenCssRule] = []
-    for item in css_items:
-        css_path = _safe_source_path(files_dir, item.href)
-        css = _rewrite_css_display_none(
-            css_path.read_text(encoding="utf-8", errors="replace")
-        )
-        cleaned = _CSS_COMMENT_RE.sub("", css)
-        for match in _CSS_RULE_RE.finditer(cleaned):
-            if _DISPLAY_NONE_RE.search(match.group("body")) is None:
-                continue
-            selector_group = match.group("selectors")
-            for selector in selector_group.split(","):
-                normalized = selector.strip()
-                if normalized and not normalized.startswith("@"):
-                    rules.append(_HiddenCssRule(href=item.href, selector=normalized))
-    return tuple(rules)
-
-
-def _audit_html_hidden_content(
-    content: str,
-    href: str,
-    css_rules: tuple[_HiddenCssRule, ...],
-) -> list[HiddenContentFinding]:
-    soup = BeautifulSoup(content, "html.parser")
-    hidden_by_tag: dict[Tag, str] = {}
-
-    for tag in soup.find_all(name=True):
-        source = _inline_hidden_source(tag)
-        if source is not None:
-            hidden_by_tag[tag] = source
-
-    for rule in css_rules:
-        try:
-            matches = soup.select(rule.selector)
-        except SelectorSyntaxError:
-            continue
-        for match in matches:
-            hidden_by_tag.setdefault(
-                match,
-                f"css {rule.href}: {rule.selector}",
-            )
-
-    findings: list[HiddenContentFinding] = []
-    counted: set[Tag] = set()
-    for tag in soup.find_all(name=True):
-        if tag not in hidden_by_tag:
-            continue
-        if any(parent in counted for parent in tag.parents):
-            continue
-        text = _normalized_text(tag)
-        if not text:
-            continue
-        counted.add(tag)
-        findings.append(
-            HiddenContentFinding(
-                href=href,
-                source=hidden_by_tag[tag],
-                character_count=len(text),
-                sample=_sample_hidden_text(text),
-            )
-        )
-    return findings
-
-
-def _inline_hidden_source(tag: Tag) -> str | None:
-    style = tag.get("style")
-    if isinstance(style, str) and _DISPLAY_NONE_RE.search(style) is not None:
-        return "inline style display:none"
-    if tag.has_attr("hidden"):
-        return "hidden attribute"
-    aria_hidden = tag.get("aria-hidden")
-    if isinstance(aria_hidden, str) and aria_hidden.casefold() == "true":
-        return "aria-hidden=true"
-    return None
-
-
-def _normalized_text(tag: Tag) -> str:
-    return re.sub(r"\s+", " ", tag.get_text(" ", strip=True)).strip()
-
-
-def _sample_hidden_text(text: str) -> str:
-    if len(text) <= _HIDDEN_TEXT_SAMPLE_LIMIT:
-        return text
-    return f"{text[: _HIDDEN_TEXT_SAMPLE_LIMIT - 3].rstrip()}..."
 
 
 def _rewrite_links(soup: BeautifulSoup, *, current_href: str) -> None:

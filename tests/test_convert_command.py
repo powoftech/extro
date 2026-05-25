@@ -74,9 +74,10 @@ def _write_snapshot(root: Path) -> Path:
     return root
 
 
-def test_convert_audit_hidden_reports_without_writing_epub(tmp_path, monkeypatch):
+def test_convert_builds_epub_without_audit_flag(tmp_path, monkeypatch):
     db_path = tmp_path / "extro.db"
     snapshot_path = _write_snapshot(tmp_path / "snapshot")
+    output_path = tmp_path / "exports" / "Example.epub"
     monkeypatch.setattr(database_module, "database_path", lambda: db_path)
     monkeypatch.setattr(
         "extro.commands.convert._require_firefox_profile",
@@ -87,15 +88,10 @@ def test_convert_audit_hidden_reports_without_writing_epub(tmp_path, monkeypatch
         "extro.commands.convert.questionary.select",
         lambda _message, choices, **_kwargs: _SelectPrompt(choices),
     )
-
-    def fail_build_epub(*_args: Any, **_kwargs: Any) -> None:
-        raise AssertionError("audit mode must not build an EPUB")
-
-    def fail_export_path(*_args: Any, **_kwargs: Any) -> Path:
-        raise AssertionError("audit mode must not compute an export path")
-
-    monkeypatch.setattr("extro.commands.convert.build_epub", fail_build_epub)
-    monkeypatch.setattr("extro.commands.convert.export_file_path", fail_export_path)
+    monkeypatch.setattr(
+        "extro.commands.convert.export_file_path",
+        lambda *_args, **_kwargs: output_path,
+    )
 
     database_module.upgrade_database()
     with database_module.session_scope() as session:
@@ -116,10 +112,8 @@ def test_convert_audit_hidden_reports_without_writing_epub(tmp_path, monkeypatch
 
     app = typer.Typer()
     app.command(name="convert")(convert_command)
-    result = CliRunner().invoke(app, ["123", "--audit-hidden"])
+    result = CliRunner().invoke(app, ["123"])
 
     assert result.exit_code == 0
-    assert "Hidden Content Audit" in result.output
-    assert "Hidden characters" in result.output
-    assert "text/ch01.html" in result.output
-    assert "Hidden diagnostic sample" in result.output
+    assert "EPUB ready" in result.output
+    assert output_path.exists()

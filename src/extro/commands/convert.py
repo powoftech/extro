@@ -10,7 +10,6 @@ import questionary
 import typer
 from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
 
 from extro.app.config import AppConfig
 from extro.app.exceptions import ConfigError, ExtroError
@@ -22,7 +21,7 @@ from extro.downloads.status import (
     format_progress,
     snapshot_details,
 )
-from extro.epub import audit_hidden_content, build_epub, hidden_audit_finding_limit
+from extro.epub import build_epub
 from extro.oreilly.client import OreillyClient
 from extro.oreilly.identifiers import normalize_book_identifier
 from extro.storage.database import session_scope, upgrade_database
@@ -31,7 +30,6 @@ from extro.storage.models import SnapshotStatus
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
-    from extro.epub import HiddenContentAuditResult
     from extro.oreilly.schemas import BookMetadata
     from extro.storage.models import Book, BookSnapshot
 
@@ -220,64 +218,11 @@ def _confirm_overwrite(path: Path) -> bool:
     )
 
 
-def _print_hidden_audit(result: HiddenContentAuditResult) -> None:
-    summary = Table.grid(padding=(0, 2))
-    summary.add_column(style="bold cyan", no_wrap=True)
-    summary.add_column()
-    summary.add_row("Hidden characters", str(result.total_hidden_characters))
-    summary.add_row("Kindle limit", str(result.hidden_character_limit))
-    summary.add_row("HTML files", str(result.html_file_count))
-    summary.add_row("Affected files", str(result.affected_file_count))
-    console.print(
-        Panel(
-            summary,
-            title="[bold yellow]Hidden Content Audit[/bold yellow]",
-            border_style="yellow",
-        )
-    )
-
-    if not result.findings:
-        console.print("[green]No hidden text detected in generated XHTML.[/green]")
-        return
-
-    limit = hidden_audit_finding_limit()
-    table = Table(
-        title=f"Top {min(limit, len(result.findings))} Hidden Blocks",
-        header_style="bold cyan",
-        border_style="dim",
-    )
-    table.add_column("File", overflow="fold")
-    table.add_column("Hidden\nChars", justify="right", no_wrap=True)
-    table.add_column("Source", overflow="fold")
-    table.add_column("Sample", overflow="fold")
-    for finding in result.findings[:limit]:
-        table.add_row(
-            finding.href,
-            str(finding.character_count),
-            finding.source,
-            finding.sample,
-        )
-    console.print(table)
-    for finding in result.findings[:limit]:
-        console.print(f"[dim]Sample:[/dim] {finding.href}: {finding.sample}")
-
-
 def convert_command(
     book_identifier: Annotated[
         str,
         typer.Argument(help="O'Reilly book identifier, URN, or URL."),
     ],
-    *,
-    audit_hidden: Annotated[
-        bool,
-        typer.Option(
-            "--audit-hidden",
-            help=(
-                "Report hidden generated XHTML text that can trigger Kindle "
-                "Previewer E3013 without writing an EPUB."
-            ),
-        ),
-    ] = False,
 ) -> None:
     """Convert a downloaded O'Reilly book snapshot to EPUB."""
     try:
@@ -299,16 +244,12 @@ def convert_command(
                 console.print("[dim]Aborted - no snapshot converted.[/dim]")
                 return
 
-            snapshot_path = Path(selected.snapshot.snapshot_path)
-            if audit_hidden:
-                audit_result = audit_hidden_content(snapshot_path, title=book.title)
-                _print_hidden_audit(audit_result)
-                return
-
             output_path = _target_path(book, selected.snapshot)
             if not _confirm_overwrite(output_path):
                 console.print("[dim]Aborted - existing EPUB left unchanged.[/dim]")
                 return
+
+            snapshot_path = Path(selected.snapshot.snapshot_path)
 
             result = build_epub(snapshot_path, output_path, title=book.title)
     except (

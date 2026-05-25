@@ -8,7 +8,7 @@ from xml.etree import ElementTree as ET
 import pytest
 
 from extro.app.exceptions import ExtroError
-from extro.epub import audit_hidden_content, build_epub, safe_epub_filename
+from extro.epub import build_epub, safe_epub_filename
 
 
 @dataclass(frozen=True)
@@ -171,47 +171,6 @@ def test_build_epub_rejects_unsafe_manifest_paths(tmp_path):
 
     with pytest.raises(ExtroError, match="Unsafe OPF manifest path"):
         build_epub(snapshot, tmp_path / "book.epub", title="Example Book")
-
-
-def test_audit_hidden_content_reports_generated_xhtml_hidden_text(tmp_path):
-    hidden_text = [
-        "Inline hidden text",
-        "Attribute hidden text",
-        "Aria hidden text",
-        "Stylesheet class hidden text",
-        "Stylesheet id hidden text",
-    ]
-    snapshot = _write_snapshot(
-        tmp_path / "snapshot",
-        _SnapshotOptions(
-            html_markup=f"""
-        <div id="sbo-rt-content">
-          <h1>Chapter One</h1>
-          <p>Visible reading text</p>
-          <div style="display:none">{hidden_text[0]}</div>
-          <p hidden>{hidden_text[1]}</p>
-          <section aria-hidden="true">{hidden_text[2]}</section>
-          <div class="css-hidden">{hidden_text[3]}</div>
-          <div id="id-hidden">{hidden_text[4]}</div>
-        </div>
-        """,
-            stylesheet_css="""
-        .css-hidden { display: none; }
-        #id-hidden { color: red; display: none !important; }
-        """,
-        ),
-    )
-
-    result = audit_hidden_content(snapshot, title="Example Book")
-
-    assert result.html_file_count == 1
-    assert result.affected_file_count == 1
-    assert result.total_hidden_characters == len("Aria hidden text")
-    assert [finding.href for finding in result.findings] == ["text/ch01.html"]
-    sources = {finding.source for finding in result.findings}
-    assert "aria-hidden=true" in sources
-    samples = " ".join(finding.sample for finding in result.findings)
-    assert "Visible reading text" not in samples
 
 
 def test_build_epub_rewrites_display_none_without_deleting_text(tmp_path):

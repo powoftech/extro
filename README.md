@@ -142,12 +142,6 @@ Converts a completed local snapshot to an EPUB file. If more than one snapshot i
 uv run extro convert <book-url-or-id>
 ```
 
-To inspect Kindle-related hidden content issues without writing an EPUB:
-
-```powershell
-uv run extro convert <book-url-or-id> --audit-hidden
-```
-
 ### `status`
 
 Shows the books and snapshots saved locally.
@@ -245,16 +239,6 @@ uv run extro download <book-url-or-id>
 ### The EPUB already exists
 
 When converting, Extro asks before overwriting an existing EPUB.
-
-### Kindle conversion looks suspicious
-
-Run the hidden content audit:
-
-```powershell
-uv run extro convert <book-url-or-id> --audit-hidden
-```
-
-This reports potential hidden text issues without creating a new EPUB.
 
 ### You want to start over
 

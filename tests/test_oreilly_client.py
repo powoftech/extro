@@ -109,6 +109,7 @@ def test_get_json_refreshes_firefox_cookies_once_on_auth_failure(
         return sessions.pop(0)
 
     monkeypatch.setattr("extro.oreilly.client.make_session", fake_make_session)
+
     def fake_refresh_cookies_via_firefox(profile_dir: Any) -> None:
         refresh_calls.append(profile_dir)
 
