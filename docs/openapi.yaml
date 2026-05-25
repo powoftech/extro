@@ -1,0 +1,331 @@
+openapi: 3.0.0
+info:
+  title: O'Reilly Platform API
+  version: "2.0"
+servers:
+  - url: "https://learning.oreilly.com/api/v2"
+paths:
+  /search:
+    get:
+      summary: Get search results
+      tags: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        archive_id:
+                          type: string
+                        ourn:
+                          type: string
+                        isbn:
+                          type: string
+                        last_modified_time:
+                          type: string
+                        issued:
+                          type: string
+                        format:
+                          type: string
+                        content_format:
+                          type: string
+                        authors:
+                          type: array
+                          items:
+                            type: string
+                        publishers:
+                          type: array
+                          items:
+                            type: string
+                        academic_excluded:
+                          type: boolean
+                        language:
+                          type: string
+                        title:
+                          type: string
+                        description:
+                          type: string
+                        url:
+                          type: string
+                        web_url:
+                          type: string
+                        source:
+                          type: string
+                        content_type:
+                          type: string
+                        virtual_pages:
+                          type: integer
+                        duration_seconds:
+                          type: integer
+                        has_assessment:
+                          type: boolean
+                        timestamp:
+                          type: string
+                        average_rating:
+                          type: integer
+                        number_of_followers:
+                          type: integer
+                        number_of_items:
+                          type: integer
+                        number_of_reviews:
+                          type: integer
+                        popularity:
+                          type: integer
+                        report_score:
+                          type: integer
+                        cover_url:
+                          type: string
+                        date_added:
+                          type: string
+                        topics:
+                          type: array
+                          items:
+                            type: string
+                        topics_payload:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              uuid:
+                                type: string
+                              slug:
+                                type: string
+                              name:
+                                type: string
+                              score:
+                                type: number
+                        minutes_required:
+                          type: number
+                  facets:
+                    type: object
+                    properties: {}
+                  total:
+                    type: integer
+                  meta:
+                    type: object
+                    properties:
+                      query_identifier:
+                        type: string
+                  page:
+                    type: integer
+                  previous:
+                    type: string
+                  next:
+                    type: string
+        "403":
+          description: Forbidden
+          content:
+            text/html:
+              schema:
+                type: object
+                properties: {}
+              examples:
+                Example 1:
+                  value: |
+                    <html>
+                      <head>
+                        <title>Access Denied</title>
+                      </head>
+                      <body>
+                        <h1>Access Denied</h1>
+
+                        You don't have permission to access "http://learning.oreilly.com/api/v2/search/?" on this server.
+
+                        <p>Reference #18.737c3617.1777872279.52777b05</p>
+
+                        <p>https://errors.edgesuite.net/18.737c3617.1777872279.52777b05</p>
+                      </body>
+                    </html>
+        "429":
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+              examples:
+                Example 1:
+                  value:
+                    detail: Request was throttled. Expected available in 57 seconds.
+      operationId: get-search
+      description: ""
+      parameters:
+        - schema:
+            type: array
+            items:
+              type: string
+              enum:
+                - book
+                - article
+                - journal
+                - collection
+                - learning path
+                - live online training
+                - sandbox
+                - scenario
+                - cloud-scenario
+                - cloud-sandbox
+                - certs practice exam
+                - video
+                - audiobook
+            uniqueItems: true
+            default:
+              - book
+          in: query
+          name: formats
+          explode: true
+          style: form
+          description: Constrain the search by including a list of formats.
+        - schema:
+            type: array
+            items:
+              type: string
+              enum:
+                - zh
+                - nl
+                - en
+                - fr
+                - de
+                - it
+                - ja
+                - ko
+                - pl
+                - pt
+                - ru
+                - es
+            default:
+              - en
+          in: query
+          name: languages
+          style: form
+          explode: true
+          description: Constrain the search by incliding a list of language codes.
+        - schema:
+            type: boolean
+            default: false
+          in: query
+          name: include_facets
+          description: "If true, returns a `facets` object in the response."
+        - schema:
+            type: string
+            enum:
+              - authors
+              - isbn
+              - publishers
+              - title
+            default: title
+          in: query
+          name: field
+          description: A specific field used to constrain the search.
+        - schema:
+            type: string
+            default: "*"
+          in: query
+          name: query
+          description: The string query for which to search.
+        - schema:
+            type: string
+            enum:
+              - popularity
+              - date_added
+              - publication_date
+              - average_rating
+              - title
+              - duration
+              - relevance
+            default: relevance
+          in: query
+          name: sort
+          description: A field to sort on.
+        - schema:
+            type: string
+            enum:
+              - asc
+              - desc
+          in: query
+          name: order
+          description: The sort order to use.
+        - schema:
+            type: number
+            minimum: 0
+            default: 0
+          in: query
+          name: page
+          description: The page number of search results to return (ignored when there is one page of results).
+        - schema:
+            type: integer
+            minimum: 0
+          in: query
+          name: offset
+          description: The position of the search result starting point.
+        - schema:
+            type: number
+            maximum: 200
+            minimum: 0
+            default: 10
+          in: query
+          name: limit
+          description: The number of results to return.
+        - schema:
+            type: boolean
+          in: query
+          name: highlight
+          description: Highlight search result matches.
+        - schema:
+            type: array
+            items:
+              type: string
+              enum:
+                - archive_id
+                - ourn
+                - isbn
+                - last_modified_time
+                - issued
+                - format
+                - content_format
+                - authors
+                - publishers
+                - academic_excluded
+                - language
+                - title
+                - description
+                - url
+                - web_url
+                - source
+                - content_type
+                - virtual_pages
+                - duration_seconds
+                - has_assessment
+                - timestamp
+                - average_rating
+                - number_of_followers
+                - number_of_items
+                - number_of_reviews
+                - popularity
+                - report_score
+                - cover_url
+                - date_added
+                - topics
+                - topics_payload
+                - minutes_required
+          in: query
+          name: fields
+          description: A list of fields to include in result object
+          style: form
+          explode: true
+components:
+  schemas: {}
+  parameters: {}
+  examples: {}
+  securitySchemes: {}
