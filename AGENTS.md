@@ -7,3 +7,7 @@
 - Use `ruff` for linting and formatting.
 - Use `sqlalchemy` for database toolkit and ORM.
 - Use `alembic` for database migration.
+
+## Documentation
+
+- `README.md` file must follow this opinionated specification: [Standard Readme](https://raw.githubusercontent.com/RichardLitt/standard-readme/refs/heads/main/spec.md)

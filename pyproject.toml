@@ -1,9 +1,10 @@
 [project]
 name = "extro"
 version = "0.1.0"
-description = "Firefox profile data extraction CLI tool"
+description = "Download O'Reilly Learning books and convert local snapshots to EPUB from the command line."
 readme = "README.md"
 requires-python = ">=3.14"
+license = "MIT"
 dependencies = [
   "alembic>=1.18.4",
   "beautifulsoup4>=4.14.3",

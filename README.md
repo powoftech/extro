@@ -1,274 +1,176 @@
 # Extro
 
-Extro is an unofficial command-line tool for people who use O'Reilly Learning and want a local, personal workflow for their books.
+Download O'Reilly Learning books and convert local snapshots to EPUB from the command line.
 
-It helps you find books, save local snapshots, check what you have, and convert a saved snapshot into a Send to Kindle-compatible EPUB.
+Extro is an unofficial command-line tool for managing a local O'Reilly Learning reading workflow. It can search O'Reilly Learning, download resumable local book snapshots, track downloaded files in SQLite, verify local file integrity, and convert completed snapshots to Send to Kindle-compatible EPUB files.
 
-## Important Note
+Extro authenticates by reading cookies from a Firefox profile you choose during configuration. It stores only local application data on your machine: configuration, a local database, downloaded snapshots, and converted exports.
 
-Extro is not affiliated with, endorsed by, or supported by O'Reilly Media.
+## Table of Contents
 
-Use it only with books you can already access through your own O'Reilly Learning account. Extro is meant for personal library management, not for sharing, redistributing, or bypassing access rules.
+- [Security](#security)
+- [Background](#background)
+- [Install](#install)
+  - [Dependencies](#dependencies)
+- [Usage](#usage)
+  - [CLI](#cli)
+- [Data Storage](#data-storage)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
 
-This is an early project. Expect the workflow and output to improve over time.
+## Security
 
-## Prerequisites
+Use Extro only with O'Reilly Learning content that you are authorized to access through your own account or organization. Extro uses your selected Firefox profile's existing authenticated session; it is not a way to bypass access controls.
 
-- Python 3.14 or newer.
-- `uv` for setup and running commands.
-- Firefox installed.
-- A Firefox profile that is already signed in to O'Reilly Learning.
+Downloaded snapshots and exported EPUB files are your responsibility. Handle them according to the applicable O'Reilly Learning, account, organization, and content license terms.
 
-## Install From Source
+## Background
 
-Clone the repository, enter the project directory, and install the project environment:
+O'Reilly Learning is useful for reading technical books, but a browser-only workflow is awkward when you want local progress visibility, resumable downloads, file integrity checks, or a personal EPUB export for compatible readers. Extro provides a local CLI workflow around those tasks while keeping state in a platform-managed application directory.
 
-```powershell
+The project is built as a Python CLI with Typer and Rich. It uses Firefox profile cookies for authenticated requests, SQLAlchemy and Alembic for the local SQLite library, and a local EPUB builder for completed book snapshots.
+
+## Install
+
+Clone the repository and install the project environment with `uv`:
+
+```sh
+git clone https://github.com/powoftech/extro.git
+cd extro
 uv sync
 ```
 
-Run Extro from the project directory:
+Confirm the CLI runs:
 
-```powershell
+```sh
 uv run extro --help
-```
-
-Show the installed version:
-
-```powershell
 uv run extro --version
 ```
 
-## First Run
+### Dependencies
 
-Start by choosing the Firefox profile Extro should use:
+Extro requires:
 
-```powershell
+- Python 3.14 or newer.
+- `uv` for Python version, environment, and package management.
+- Firefox installed and opened at least once.
+- A Firefox profile signed in to O'Reilly Learning.
+- Authorized access to the O'Reilly Learning books you use with Extro.
+
+## Usage
+
+Run configuration first so Extro knows which Firefox profile to read:
+
+```sh
 uv run extro config
 ```
 
-Extro will show the Firefox profiles it can find and ask you to select one. Choose the profile that is already signed in to O'Reilly Learning.
+After that, the normal workflow is to search, download, convert, and verify:
 
-## Everyday Workflow
-
-Search for a book:
-
-```powershell
-uv run extro search "<keyword>"
-```
-
-Download a book snapshot:
-
-```powershell
-uv run extro download <book-url-or-id>
-```
-
-Convert a downloaded snapshot to EPUB:
-
-```powershell
-uv run extro convert <book-url-or-id>
-```
-
-Check what is saved locally:
-
-```powershell
-uv run extro status
-```
-
-Verify saved files:
-
-```powershell
+```sh
+uv run extro search "python" --limit 5
+uv run extro download <identifier-or-url>
+uv run extro convert <identifier-or-url>
 uv run extro verify
 ```
 
-Delete snapshots for one book:
+The book argument accepted by download, convert, status, verify, and delete commands can be an O'Reilly book identifier, URN, or URL.
 
-```powershell
-uv run extro delete <book-url-or-id>
-```
+### CLI
 
-Reset all local Extro data:
+`config` selects and saves the Firefox profile Extro should use:
 
-```powershell
-uv run extro reset
-```
-
-## Command Reference
-
-### `config`
-
-Selects the Firefox profile Extro should use.
-
-Run this before downloading. You can run it again later if you switch Firefox profiles.
-
-```powershell
+```sh
 uv run extro config
 ```
 
-### `search`
+`search` searches English books on O'Reilly Learning:
 
-Searches English books on O'Reilly Learning and prints matching titles, authors, publishers, ISBNs, and identifiers.
-
-```powershell
-uv run extro search "<keyword>"
+```sh
+uv run extro search "python" --field title --sort popularity --limit 10
+uv run extro search "fluent python" --page 2
 ```
 
-Useful options:
+Supported search fields are `title`, `publishers`, `authors`, and `isbn`. Supported sort values are `relevance`, `popularity`, `date_added`, `publication_date`, `average_rating`, `title`, and `duration`.
 
-```powershell
-uv run extro search "<keyword>" --field title
-uv run extro search "<keyword>" --field authors
-uv run extro search "<keyword>" --field publishers
-uv run extro search "<keyword>" --field isbn
-uv run extro search "<keyword>" --sort popularity --limit 20
-uv run extro search "<keyword>" --page 2
+`download` downloads or resumes a local snapshot:
+
+```sh
+uv run extro download <identifier-or-url>
 ```
 
-### `download`
+`convert` converts a completed snapshot to EPUB. If more than one completed snapshot is available, Extro asks which one to convert:
 
-Downloads a local snapshot of a book you can access. If a download was interrupted, running the command again resumes progress.
-
-```powershell
-uv run extro download <book-url-or-id>
+```sh
+uv run extro convert <identifier-or-url>
 ```
 
-The argument can be an O'Reilly book URL, URN, or identifier.
+`status` shows downloaded books and snapshots:
 
-### `convert`
-
-Converts a completed local snapshot to an EPUB file. If more than one snapshot is available, Extro asks which one to convert.
-
-```powershell
-uv run extro convert <book-url-or-id>
-```
-
-### `status`
-
-Shows the books and snapshots saved locally.
-
-```powershell
+```sh
 uv run extro status
-```
-
-Show one book:
-
-```powershell
-uv run extro status <book-url-or-id>
-```
-
-Page through the list:
-
-```powershell
+uv run extro status <identifier-or-url>
 uv run extro status --limit 20 --page 2
 ```
 
-### `verify`
+`verify` checks stored SHA-256 hashes and read-only file protection:
 
-Checks whether downloaded files are still present and unchanged.
-
-```powershell
+```sh
 uv run extro verify
+uv run extro verify <identifier-or-url>
 ```
 
-Check one book:
+`delete` interactively removes selected snapshots for one book. If converted files exist for the selected snapshots, Extro asks whether to remove those exports too:
 
-```powershell
-uv run extro verify <book-url-or-id>
+```sh
+uv run extro delete <identifier-or-url>
 ```
 
-### `delete`
+`reset` deletes the local Extro library and downloaded assets, then recreates an empty database:
 
-Interactively deletes one or more snapshots for a book. If converted files exist for the selected snapshots, Extro asks whether to delete those too.
-
-```powershell
-uv run extro delete <book-url-or-id>
-```
-
-### `reset`
-
-Deletes all local Extro books, snapshots, and downloaded assets, then recreates an empty local library.
-
-```powershell
+```sh
 uv run extro reset
 ```
 
-This command asks for confirmation before deleting anything.
+Read the confirmation prompt carefully before using `reset`.
 
-### `--version`
+## Data Storage
 
-Prints the Extro version.
+Extro stores application data in the standard per-user application directories for your operating system, as resolved by `platformdirs`.
 
-```powershell
-uv run extro --version
+- Configuration stores the selected Firefox profile in `config.json`.
+- Local library state is stored in `extro.db`.
+- Downloaded book snapshots are stored under `downloads/`.
+- Converted EPUB files are stored under `exports/`.
+
+Use `extro status`, `extro verify`, `extro delete`, and `extro reset` to inspect or manage local Extro data instead of editing these files by hand.
+
+## Development
+
+Use `uv` for Python versions, virtual environments, and packages:
+
+```sh
+uv sync --dev
 ```
 
-## Data Locations
+Run the project checks before sending changes:
 
-Extro stores its files in the normal application folders for your operating system.
-
-- Configuration: the selected Firefox profile.
-- Local library: saved book records and downloaded snapshots.
-- Exports: converted EPUB files.
-
-Use `extro status`, `extro delete`, and `extro reset` to manage this data instead of editing files by hand.
-
-## Troubleshooting
-
-### Extro cannot find Firefox
-
-Install Firefox and open it at least once so it creates a profile.
-
-### Extro cannot access O'Reilly Learning
-
-Open Firefox, sign in to O'Reilly Learning, then run:
-
-```powershell
-uv run extro config
-```
-
-Choose the signed-in profile.
-
-### A download fails
-
-Run the same download command again. Extro is designed to resume incomplete downloads.
-
-```powershell
-uv run extro download <book-url-or-id>
-```
-
-### The EPUB already exists
-
-When converting, Extro asks before overwriting an existing EPUB.
-
-### You want to start over
-
-Use reset:
-
-```powershell
-uv run extro reset
-```
-
-Read the confirmation prompt carefully. This removes the local Extro library.
-
-## Contributor Notes
-
-Use `uv` for Python, environments, and packages:
-
-```powershell
-uv sync
-```
-
-Run checks before sending changes:
-
-```powershell
+```sh
+uv run pytest
+uv run pyright
 uv run ruff check .
 uv run ruff format --check .
-uv run pyright
-uv run pytest
 ```
 
-Keep the README focused on what users can do with Extro. Detailed implementation notes belong in code, tests, or developer documentation.
+Database schema changes should use SQLAlchemy models and Alembic migrations.
+
+## Contributing
+
+Questions, bug reports, and feature requests should be opened in the [GitHub issue tracker](https://github.com/powoftech/extro/issues).
+
+Focused pull requests are welcome. Please include relevant tests and make sure `pytest`, `pyright`, `ruff check`, and `ruff format --check` pass before submitting.
 
 ## License
 
-Extro is released under the MIT License. See [LICENSE](LICENSE).
+MIT © 2026 Phuong Dang. See [LICENSE](LICENSE).
